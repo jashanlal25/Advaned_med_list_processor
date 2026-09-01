@@ -1348,7 +1348,7 @@
                 if (!line.includes('-----')) continue;
 
                 let tp = '', bonus = '', tax = '', isExtended = false;
-                let name, value;
+                let name, value, endMark = '';
 
                 if (line.includes('|')) {
                     isExtended = true;
@@ -1370,7 +1370,15 @@
                     value = parts[1] ? parts[1].trim() : '';
                 }
 
-                items.push({ name, value, tp, bonus, tax, isExtended, original: line });
+                // Extract ending mark after % (., ,, :, or none)
+                if (value && value.includes('%')) {
+                    const match = value.match(/%([.,:]?)/);
+                    if (match && match[1]) {
+                        endMark = match[1];
+                    }
+                }
+
+                items.push({ name, value, tp, bonus, tax, isExtended, endMark, original: line });
             }
             items.sort((a, b) => a.name.toUpperCase().localeCompare(b.name.toUpperCase()));
             return items;
@@ -1470,7 +1478,39 @@
 
         function updateItemCount() {
             const items = parseItems(editorTextarea.value);
-            itemCount.textContent = `${items.length} items`;
+
+            // Count ending marks
+            const markCounts = { '.': 0, ',': 0, ':': 0, 'plain': 0 };
+            items.forEach(item => {
+                if (item.endMark) {
+                    markCounts[item.endMark]++;
+                } else if (item.value.includes('%')) {
+                    markCounts['plain']++;
+                }
+            });
+
+            // Auto-enable "Show % ending marks" if ending marks are detected
+            const showEndMarks = document.getElementById('showEndMarks');
+            const hasEndMarks = markCounts['.'] > 0 || markCounts[','] > 0 || markCounts[':'] > 0;
+            if (showEndMarks && hasEndMarks && !showEndMarks.checked) {
+                showEndMarks.checked = true;
+            }
+
+            // Build count text
+            let countText = `${items.length} items`;
+            if (showEndMarks && showEndMarks.checked && items.length > 0) {
+                const markDetails = [];
+                if (markCounts['.'] > 0) markDetails.push(`${markCounts['.']} with .`);
+                if (markCounts[','] > 0) markDetails.push(`${markCounts[',']} with ,`);
+                if (markCounts[':'] > 0) markDetails.push(`${markCounts[':']} with :`);
+                if (markCounts['plain'] > 0) markDetails.push(`${markCounts['plain']} plain`);
+
+                if (markDetails.length > 0) {
+                    countText += ` (% marks: ${markDetails.join(', ')})`;
+                }
+            }
+
+            itemCount.textContent = countText;
             generateBtn.disabled = items.length === 0;
         }
 
@@ -1493,6 +1533,10 @@
             formData.append('list_type', document.getElementById('list_type').value);
             formData.append('output_format', document.getElementById('output_format').value);
             formData.append('message', document.getElementById('message').value);
+
+            // Send preserve end marks option
+            const preserveEndMarks = document.getElementById('preserveEndMarks');
+            formData.append('preserve_end_marks', preserveEndMarks && preserveEndMarks.checked ? '1' : '0');
 
             loading.style.display = 'block';
             result.style.display = 'none';

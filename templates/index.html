@@ -1549,6 +1549,13 @@
                                 <input type="text" id="separatorValue" value="" placeholder=", or ; or empty">
                             </div>
                         </div>
+                        <div style="display: flex; align-items: center;">
+                            <label class="checkbox-label" style="margin-bottom: 0;">
+                                <input type="checkbox" id="keepEndMark">
+                                <span class="checkmark"></span>
+                                Keep original % marks
+                            </label>
+                        </div>
                     </div>
                     <div class="input-group" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;">
                         <label class="checkbox-label">
@@ -1798,7 +1805,7 @@
         });
 
         // Handle file selection
-        function handleFile(file) {
+        async function handleFile(file) {
             errorMessage.classList.remove('show');
             selectedFile = file;
             isTextFile = file.name.toLowerCase().endsWith('.txt');
@@ -1806,8 +1813,56 @@
             fileName.textContent = `Selected: ${file.name}`;
             fileName.style.display = 'inline-block';
 
+            // Detect ending marks in the file
+            if (isTextFile) {
+                try {
+                    const text = await file.text();
+                    detectEndingMarks(text);
+                } catch (error) {
+                    console.error('Error reading file for mark detection:', error);
+                }
+            }
+
             // Show settings panel for all file types
             settingsPanel.style.display = 'block';
+        }
+
+        // Detect ending marks in text content
+        function detectEndingMarks(text) {
+            const markCounts = { '.': 0, ',': 0, ':': 0, plain: 0 };
+            const lines = text.split('\n');
+
+            for (let line of lines) {
+                line = line.trim();
+                if (!line || !line.includes('%')) continue;
+
+                // Match percentage values with possible ending marks
+                const match = line.match(/\d+\.?\d*%([.,:]?)/);
+                if (match) {
+                    if (match[1]) {
+                        markCounts[match[1]]++;
+                    } else {
+                        markCounts.plain++;
+                    }
+                }
+            }
+
+            // Display detected marks
+            const endMarkDetected = document.getElementById('endMarkDetected');
+            const hasMarks = markCounts['.'] > 0 || markCounts[','] > 0 || markCounts[':'] > 0;
+
+            if (hasMarks) {
+                const details = [];
+                if (markCounts['.'] > 0) details.push(`${markCounts['.']} with .`);
+                if (markCounts[','] > 0) details.push(`${markCounts[',']} with ,`);
+                if (markCounts[':'] > 0) details.push(`${markCounts[':']} with :`);
+                if (markCounts.plain > 0) details.push(`${markCounts.plain} plain`);
+
+                endMarkDetected.textContent = `✓ Detected: ${details.join(', ')}`;
+                endMarkDetected.style.display = 'block';
+            } else {
+                endMarkDetected.style.display = 'none';
+            }
         }
 
         // Process file or pasted text with user settings
@@ -1845,8 +1900,7 @@
                     resetUploadSection();
                 } catch (error) {
                     loading.classList.remove('show');
-                    errorMessage.textContent = 'Error processing pasted text.';
-                    errorMessage.classList.add('show');
+                    showDetailedError('Error Processing Pasted Text', 'An error occurred while processing your pasted text.', error.message || error.toString());
                     settingsPanel.style.display = 'block';
                 }
                 return;
@@ -1922,6 +1976,10 @@
             formData.append('new_format', newFormat.checked);
             formData.append('output_format', extendedOutput.checked ? 'extended' : 'old');
 
+            // If "Keep original % marks" is checked, send 'keep', otherwise send '' (plain)
+            const keepEndMarkCheckbox = document.getElementById('keepEndMark');
+            formData.append('discount_end_mark', keepEndMarkCheckbox.checked ? 'keep' : '');
+
             try {
                 const response = await fetch('/upload', {
                     method: 'POST',
@@ -1939,8 +1997,7 @@
                 loading.classList.remove('show');
 
                 if (data.error) {
-                    errorMessage.textContent = data.error;
-                    errorMessage.classList.add('show');
+                    showDetailedError('File Processing Error', data.error, data.details || null);
                     settingsPanel.style.display = 'block';
                     return;
                 }
@@ -1950,8 +2007,7 @@
 
             } catch (error) {
                 loading.classList.remove('show');
-                errorMessage.textContent = 'Error processing file. Please try again.';
-                errorMessage.classList.add('show');
+                showDetailedError('Error Processing File', 'An error occurred while processing your file.', error.message || error.toString());
                 settingsPanel.style.display = 'block';
             }
         }
@@ -1959,6 +2015,8 @@
         function parseTextFormat(text, decreaseValue, separator) {
             const lines = text.split('\n');
             const output = [];
+            const keepEndMarkCheckbox = document.getElementById('keepEndMark');
+            const keepOriginalMarks = keepEndMarkCheckbox.checked;
 
             for (let line of lines) {
                 line = line.trim();
@@ -1966,19 +2024,27 @@
 
                 let name = '', value = '';
 
-                const pctMatch = line.match(/^(.+?)\s+(\d+\.?\d*)\s*%\.?\s*$/);
+                const pctMatch = line.match(/^(.+?)\s+(\d+\.?\d*)\s*%([.,:]?)\s*$/);
                 const netMatch = line.match(/^(.+?)\s+(\d+\.?\d*)\s*net\s*$/i);
                 const tpMatch = line.match(/^(.+?)\s+tp\s*$/i);
 
                 if (pctMatch) {
                     name = pctMatch[1].trim().replace(/\.+$/, '').trim();
                     let num = parseFloat(pctMatch[2]);
+                    const originalMark = pctMatch[3] || ''; // Capture original ending mark
+
                     if (decreaseValue > 0) {
                         num = Math.max(num - decreaseValue, 0);
                         value = num.toFixed(2) + '%';
                     } else {
                         value = pctMatch[2] + '%';
                     }
+
+                    // If checkbox is checked, keep original mark; otherwise plain (no mark)
+                    if (keepOriginalMarks) {
+                        value += originalMark;
+                    }
+                    // If checkbox not checked, value stays plain (no mark added)
                 } else if (netMatch) {
                     name = netMatch[1].trim().replace(/\.+$/, '').trim();
                     value = netMatch[2] + 'net';
@@ -2003,6 +2069,8 @@
         function processExtendedFormat(text, dec, separator) {
             const lines = text.split('\n');
             const output = [];
+            const keepEndMarkCheckbox = document.getElementById('keepEndMark');
+            const keepOriginalMarks = keepEndMarkCheckbox.checked;
 
             for (const line of lines) {
                 const trimmed = line.trim();
@@ -2022,13 +2090,25 @@
                     pipeParts = '';
                 }
 
-                // Apply decrease to percentage values only
-                if (dec > 0) {
-                    const pctMatch = valuePart.match(/^(\d+\.?\d*)\s*(%.*)/);
-                    if (pctMatch) {
-                        let num = parseFloat(pctMatch[1]);
+                // Apply decrease to percentage values only and handle ending mark
+                const pctMatch = valuePart.match(/^(\d+\.?\d*)\s*%([.,:]?)(.*)/);
+                if (pctMatch) {
+                    const originalMark = pctMatch[2] || ''; // Capture original ending mark
+                    const afterMark = pctMatch[3] || '';
+                    let num = parseFloat(pctMatch[1]);
+
+                    if (dec > 0) {
                         num = Math.max(num - dec, 0);
-                        valuePart = num.toFixed(2) + pctMatch[2];
+                        valuePart = num.toFixed(2) + '%';
+                    } else {
+                        valuePart = pctMatch[1] + '%';
+                    }
+
+                    // If checkbox is checked, keep original mark; otherwise plain (no mark)
+                    if (keepOriginalMarks) {
+                        valuePart += originalMark + afterMark;
+                    } else {
+                        valuePart += afterMark; // No mark, just keep any text after the %
                     }
                 }
 
@@ -2043,6 +2123,74 @@
             }
 
             return { text: output.join('\n'), count: output.length };
+        }
+
+        // Function to show detailed error with expandable details
+        function showDetailedError(title, message, details) {
+            errorMessage.innerHTML = '';
+
+            const errorTitle = document.createElement('div');
+            errorTitle.style.fontWeight = 'bold';
+            errorTitle.style.marginBottom = '8px';
+            errorTitle.textContent = title;
+
+            const errorMsg = document.createElement('div');
+            errorMsg.textContent = message;
+            errorMsg.style.marginBottom = '8px';
+
+            errorMessage.appendChild(errorTitle);
+            errorMessage.appendChild(errorMsg);
+
+            if (details) {
+                const detailsBtn = document.createElement('button');
+                detailsBtn.textContent = '🔍 Click to see error details';
+                detailsBtn.style.cssText = `
+                    background: #0d6efd;
+                    color: white;
+                    border: none;
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 13px;
+                    margin-top: 8px;
+                `;
+                detailsBtn.onmouseover = () => detailsBtn.style.background = '#0b5ed7';
+                detailsBtn.onmouseout = () => detailsBtn.style.background = '#0d6efd';
+
+                const detailsBox = document.createElement('pre');
+                detailsBox.style.cssText = `
+                    display: none;
+                    margin-top: 12px;
+                    padding: 12px;
+                    background: #1a1a1a;
+                    color: #00ff00;
+                    border-radius: 6px;
+                    font-size: 12px;
+                    overflow-x: auto;
+                    max-height: 300px;
+                    overflow-y: auto;
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
+                `;
+                detailsBox.textContent = details;
+
+                let isExpanded = false;
+                detailsBtn.onclick = () => {
+                    isExpanded = !isExpanded;
+                    if (isExpanded) {
+                        detailsBox.style.display = 'block';
+                        detailsBtn.textContent = '🔼 Hide error details';
+                    } else {
+                        detailsBox.style.display = 'none';
+                        detailsBtn.textContent = '🔍 Click to see error details';
+                    }
+                };
+
+                errorMessage.appendChild(detailsBtn);
+                errorMessage.appendChild(detailsBox);
+            }
+
+            errorMessage.classList.add('show');
         }
 
         processBtn.addEventListener('click', processFile);

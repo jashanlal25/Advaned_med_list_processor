@@ -21,18 +21,21 @@ def _is_suffix_only(s):
     """True if string is purely trailing punctuation like ',' or '.' — not real bonus info."""
     return bool(s) and all(c in ',.;: ' for c in s.strip())
 
-def parse_discount_value(value):
-    """Parse discount/bonus value and return (discount_num, bonus_str)
+def parse_discount_value(value, preserve_end_marks=False):
+    """Parse discount/bonus value and return (discount_num, bonus_str, end_mark)
 
     The '/' character is used as a separator between discount and bonus.
     Examples:
-        - "10%/5+5" → discount=10.0, bonus="5+5"
-        - "TP,/something" → discount=0.0, bonus="TP,/something" (TP with bonus)
-        - "15" → discount=15.0, bonus=""
+        - "10%/5+5" → discount=10.0, bonus="5+5", end_mark=""
+        - "TP,/something" → discount=0.0, bonus="TP,/something", end_mark=""
+        - "15" → discount=15.0, bonus="", end_mark=""
+        - "10.00%." → discount=10.0, bonus="", end_mark="." (if preserve_end_marks=True)
     """
     # First, check if '/' is used as separator for bonus
     bonus_part = ""
     main_value = value
+    end_mark = ""
+
     if '/' in value:
         slash_pos = value.find('/')
         main_value = value[:slash_pos].strip()
@@ -41,7 +44,7 @@ def parse_discount_value(value):
     # Check if it's a "NET" value (e.g. "360 Net" means net rate, not discount%)
     if 'net' in main_value.lower():
         # The number is the NET RATE (TP), not a discount percentage → disc = 0%
-        return 0.0, main_value.strip() if not bonus_part else bonus_part
+        return 0.0, main_value.strip() if not bonus_part else bonus_part, end_mark
 
     elif '%' in main_value:
         # Extract numeric part from percentage
@@ -52,34 +55,42 @@ def parse_discount_value(value):
             discount = float(num)
         except:
             discount = 0.0
-        # If there's content after % in main_value (before /), include it
-        after_percent = main_value[percent_pos+1:].strip()
+        # If there's content after % in main_value (before /), check if it's an end mark
+        after_percent = main_value[percent_pos+1:]
+
+        if preserve_end_marks and after_percent and len(after_percent) == 1 and after_percent in '.,;:':
+            # This is an ending mark to preserve
+            end_mark = after_percent
+            after_percent = ""
+        else:
+            after_percent = after_percent.strip()
+
         if bonus_part:
             # '/' was used, so bonus_part is the bonus
-            return discount, bonus_part
+            return discount, bonus_part, end_mark
         elif after_percent:
             # No '/', but there's text after % - treat as additional info
-            return discount, after_percent
+            return discount, after_percent, end_mark
         else:
-            return discount, ""
+            return discount, "", end_mark
     elif 'TP' in main_value.upper():
         # Return TP value (preserving any separators like "TP," or "Tp,")
         # If bonus_part exists, combine main_value with bonus info
         if bonus_part:
-            return 0.0, f"{main_value}/{bonus_part}"
-        return 0.0, main_value.strip()
+            return 0.0, f"{main_value}/{bonus_part}", end_mark
+        return 0.0, main_value.strip(), end_mark
     else:
         try:
             discount = float(main_value)
-            return discount, bonus_part
+            return discount, bonus_part, end_mark
         except:
-            return 0.0, value
+            return 0.0, value, end_mark
 
-def generate_item_row(serial, item_name, value):
+def generate_item_row(serial, item_name, value, preserve_end_marks=False):
     """Generate HTML for a single item row"""
     display_name = '          ' + item_name.upper().ljust(28)
     hidden_name = item_name.upper().ljust(50)
-    discount, bonus = parse_discount_value(value)
+    discount, bonus, end_mark = parse_discount_value(value, preserve_end_marks)
 
     # Check if '/' was used in original value (bonus separator)
     has_slash_separator = '/' in value
@@ -108,18 +119,18 @@ def generate_item_row(serial, item_name, value):
         bonus_str = ' ' * 44
     elif has_slash_separator and bonus:
         # '/' was used as separator - bonus goes in bonus column
-        discount_str = f'{discount:.2f}%'.rjust(9)
+        discount_str = f'{discount:.2f}%{end_mark}'.rjust(9 + len(end_mark))
         bonus_str = bonus.ljust(44)
     elif bonus:
         # No '/' separator but there's text after % - append to discount
         if discount > 0:
-            discount_str = f'{discount:.2f}%{bonus}'.rjust(9 + len(bonus))
+            discount_str = f'{discount:.2f}%{end_mark}{bonus}'.rjust(9 + len(end_mark) + len(bonus))
             bonus_str = ' ' * 44
         else:
-            discount_str = f'0.00%{bonus}'.rjust(9 + len(bonus))
+            discount_str = f'0.00%{end_mark}{bonus}'.rjust(9 + len(end_mark) + len(bonus))
             bonus_str = ' ' * 44
     else:
-        discount_str = f'{discount:.2f}%'.rjust(9)
+        discount_str = f'{discount:.2f}%{end_mark}'.rjust(9 + len(end_mark))
         bonus_str = ' ' * 44
 
     return f'''<tr class="item"><td align="center">
@@ -138,11 +149,11 @@ def generate_item_row(serial, item_name, value):
 def generate_section_header(letter):
     return f'<tr><td colspan="7" align="center" style=" background: rgb(12,146,252); background: radial-gradient(circle, rgba(12,146,252,1) 50%, rgba(255,255,255,1) 100%); color:white;" ><b>{letter}</b></td></tr>'
 
-def generate_js_vars_full(data_items):
+def generate_js_vars_full(data_items, preserve_end_marks=False):
     """Generate JS variables for Printf and myfun (with ITMBONUS and ITMDISC)"""
     js_vars = ""
     for i, (item_name, value) in enumerate(data_items, 1):
-        discount, bonus = parse_discount_value(value)
+        discount, bonus, end_mark = parse_discount_value(value, preserve_end_marks)
         has_slash = '/' in value
 
         # Special handling for "TP" and similar non-numeric values
@@ -184,6 +195,9 @@ var namevar{i}=document.getElementById("nameid{i}").value;
             if _is_suffix_only(bonus):
                 suffix_str = f'"{bonus.strip()}"'
                 bonus_str  = '""'
+            elif end_mark:
+                suffix_str = f'"{end_mark}"'
+                bonus_str  = f'"{bonus}"' if bonus else '""'
             else:
                 suffix_str = '""'
                 bonus_str  = f'"{bonus}"' if bonus else '""'
@@ -197,11 +211,11 @@ var namevar{i}=document.getElementById("nameid{i}").value;
 '''
     return js_vars
 
-def generate_js_vars_createrows(data_items):
+def generate_js_vars_createrows(data_items, preserve_end_marks=False):
     """Generate JS variables for createRows function (PDF generation)"""
     js_vars = ""
     for i, (item_name, value) in enumerate(data_items, 1):
-        discount, bonus = parse_discount_value(value)
+        discount, bonus, end_mark = parse_discount_value(value, preserve_end_marks)
         has_slash = '/' in value
 
         # Special handling for "TP" and similar non-numeric values
@@ -246,6 +260,9 @@ var namevarr{i} = " ";
             if _is_suffix_only(bonus):
                 disc_display = f'"{discount:.2f}%{bonus.strip()}"'
                 bonus_str    = '""'
+            elif end_mark:
+                disc_display = f'"{discount:.2f}%{end_mark}"'
+                bonus_str    = f'"{bonus}"' if bonus else '""'
             else:
                 disc_display = f'"{discount:.2f}%"'
                 bonus_str    = f'"{bonus}"' if bonus else '""'
@@ -259,11 +276,11 @@ var namevarr{i} = " ";
 '''
     return js_vars
 
-def generate_js_vars_simple(data_items):
+def generate_js_vars_simple(data_items, preserve_end_marks=False):
     """Generate JS variables for mywht (including ITMCODE, ITMNAME, ITMBONUS, ITMDISC, namevar)"""
     js_vars = ""
     for i, (item_name, value) in enumerate(data_items, 1):
-        discount, bonus = parse_discount_value(value)
+        discount, bonus, end_mark = parse_discount_value(value, preserve_end_marks)
         has_slash = '/' in value
 
         # Special handling for "TP" and similar non-numeric values
@@ -287,6 +304,9 @@ var namevar{i}=document.getElementById("nameid{i}").value;
             if _is_suffix_only(bonus):
                 suffix_str = f'"{bonus.strip()}"'
                 bonus_str  = '""'
+            elif end_mark:
+                suffix_str = f'"{end_mark}"'
+                bonus_str  = f'"{bonus}"' if bonus else '""'
             else:
                 suffix_str = '""'
                 bonus_str  = f'"{bonus}"' if bonus else '""'

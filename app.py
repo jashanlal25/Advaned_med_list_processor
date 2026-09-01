@@ -78,7 +78,7 @@ def _fmt_tp(text):
     except ValueError:
         return ""
 
-def process_htm_content(html_content, decrease_value=1, stock_format=False, new_format=False):
+def process_htm_content(html_content, decrease_value=1, stock_format=False, new_format=False, discount_end_mark='keep'):
     """Process HTM content and extract medicine names with discount rates.
 
     Each result also carries the extra fields needed by the new-format generator:
@@ -101,6 +101,7 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
 
             # Prefer data-disc attribute; fall back to data-bonus if disc is 0
             disc_attr = item.get("data-disc", "").strip()
+            disc_suffix_attr = item.get("data-disc-suffix", "").strip()
             bonus_attr = item.get("data-bonus", "").strip()
             tp_attr = item.get("data-tp", "").strip()
             tax_attr = item.get("data-tax", "").strip()
@@ -110,10 +111,27 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
             except ValueError:
                 disc_num = 0.0
 
+            # Detect original ending mark from data-disc-suffix
+            original_end_mark = ''
+            if disc_suffix_attr and len(disc_suffix_attr) == 1 and disc_suffix_attr in '.,;:':
+                original_end_mark = disc_suffix_attr
+
             if disc_num > 0:
                 disc_num -= decrease_value
                 disc_num = max(disc_num, 0)
-                discount_rate = f"{disc_num:.2f}%"
+
+                # Apply ending mark based on user selection
+                if discount_end_mark == 'keep':
+                    # Keep the original mark (or no mark if there wasn't one)
+                    ending = original_end_mark
+                elif discount_end_mark == '':
+                    # Strip all marks
+                    ending = ''
+                else:
+                    # Apply the selected mark
+                    ending = discount_end_mark
+
+                discount_rate = f"{disc_num:.2f}%{ending}"
             elif bonus_attr:
                 discount_rate = bonus_attr
             else:
@@ -182,15 +200,32 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
                 percent_pos = original_discount.find('%')
 
                 if percent_pos != -1:
-                    # Has a percentage - extract numeric part and any separators after %
+                    # Has a percentage - extract numeric part and detect ending mark
                     num_part = original_discount[:percent_pos+1]  # Include the %
-                    separators = original_discount[percent_pos+1:]  # Everything after %
+                    after_percent = original_discount[percent_pos+1:].strip()
+
+                    # Detect original ending mark
+                    original_end_mark = ''
+                    if after_percent and len(after_percent) == 1 and after_percent in '.,;:':
+                        original_end_mark = after_percent
 
                     try:
                         rate_value = float(num_part.strip('%'))
                         rate_value -= decrease_value
                         rate_value = max(rate_value, 0)
-                        discount_rate = f"{rate_value:.2f}%" + separators
+
+                        # Apply ending mark based on user selection
+                        if discount_end_mark == 'keep':
+                            # Keep the original mark (or no mark if there wasn't one)
+                            ending = original_end_mark
+                        elif discount_end_mark == '':
+                            # Strip all marks
+                            ending = ''
+                        else:
+                            # Apply the selected mark
+                            ending = discount_end_mark
+
+                        discount_rate = f"{rate_value:.2f}%{ending}"
                     except ValueError:
                         # If conversion fails, keep the original
                         discount_rate = original_discount
@@ -280,32 +315,43 @@ def upload_file():
     output_format = request.form.get('output_format', 'old').lower()
     extended_output = output_format == 'extended'
 
+    # Get discount ending mark preference (default to 'keep')
+    discount_end_mark = request.form.get('discount_end_mark', 'keep')
+
     try:
-        html_content = file.read().decode('utf-8')
-    except UnicodeDecodeError:
-        file.seek(0)
-        html_content = file.read().decode('latin-1')
+        try:
+            html_content = file.read().decode('utf-8')
+        except UnicodeDecodeError:
+            file.seek(0)
+            html_content = file.read().decode('latin-1')
 
-    results = process_htm_content(html_content, decrease_value, stock_format, new_format)
-    text_output = generate_text_output(results, separator, extended=extended_output)
+        results = process_htm_content(html_content, decrease_value, stock_format, new_format, discount_end_mark)
+        text_output = generate_text_output(results, separator, extended=extended_output)
 
-    filename_base = os.path.splitext(secure_filename(file.filename))[0]
-    output_filename = f"{filename_base}_name_with_%.txt"
-    token = _store_result({
-        'text': text_output,
-        'filename': output_filename,
-        'results': results
-    })
+        filename_base = os.path.splitext(secure_filename(file.filename))[0]
+        output_filename = f"{filename_base}_name_with_%.txt"
+        token = _store_result({
+            'text': text_output,
+            'filename': output_filename,
+            'results': results
+        })
 
-    return jsonify({
-        'success': True,
-        'results': results,
-        'text_output': text_output,
-        'filename': output_filename,
-        'download_token': token,
-        'count': len(results),
-        'decrease_value': decrease_value
-    })
+        return jsonify({
+            'success': True,
+            'results': results,
+            'text_output': text_output,
+            'filename': output_filename,
+            'download_token': token,
+            'count': len(results),
+            'decrease_value': decrease_value
+        })
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return jsonify({
+            'error': f'Error processing file: {str(e)}',
+            'details': error_details
+        }), 500
 
 @app.route('/download')
 def download_file():
@@ -407,7 +453,7 @@ def parse_text_content_extended(text_content):
         })
     return items
 
-def generate_html_from_template(data_items, template_path, list_no="000001", list_date=None, title="S.S.D PHARMA", whatsapp_number="923337068868"):
+def generate_html_from_template(data_items, template_path, list_no="000001", list_date=None, title="S.S.D PHARMA", whatsapp_number="923337068868", preserve_end_marks=False):
     """Generate HTML file from template and data items"""
     import datetime
     if list_date is None:
@@ -449,7 +495,7 @@ def generate_html_from_template(data_items, template_path, list_no="000001", lis
         if first_letter != current_letter:
             current_letter = first_letter
             items_html += generate_section_header(current_letter)
-        items_html += generate_item_row(i, item_name, value)
+        items_html += generate_item_row(i, item_name, value, preserve_end_marks)
 
     items_html += f'''<tr class="heading2"> <td style=" text-align: CENTER; border-radius: 0px 0px 16px 16px; padding-left: 10px;" colspan="5" >Total Products :
   {total_count}
@@ -472,8 +518,8 @@ def generate_html_from_template(data_items, template_path, list_no="000001", lis
     content = re.sub(r'id="rows" value="\d+"', f'id="rows" value="{total_count}"', content)
 
     # 5. Generate new JS content
-    js_vars_full = generate_js_vars_full(sorted_items)
-    js_vars_simple = generate_js_vars_simple(sorted_items)
+    js_vars_full = generate_js_vars_full(sorted_items, preserve_end_marks)
+    js_vars_simple = generate_js_vars_simple(sorted_items, preserve_end_marks)
     js_if_blocks_printf = generate_js_if_blocks(sorted_items, 'mywindow')
     js_if_blocks_myfun = generate_js_if_blocks(sorted_items, 'myWindow')
     js_if_whatsapp = generate_js_if_blocks_whatsapp(sorted_items)
@@ -542,7 +588,7 @@ def generate_html_from_template(data_items, template_path, list_no="000001", lis
     )
 
     # 9. Update createRows function (PDF generation)
-    js_vars_createrows = generate_js_vars_createrows(sorted_items)
+    js_vars_createrows = generate_js_vars_createrows(sorted_items, preserve_end_marks)
     js_if_blocks_pdf = generate_js_if_blocks_pdf(sorted_items)
 
     content = re.sub(
@@ -606,6 +652,9 @@ def _generate_html_inner():
         output_format = 'old'
     whatsapp_number = ''.join(filter(str.isdigit, whatsapp_number))
 
+    # Get preserve_end_marks option
+    preserve_end_marks = request.form.get('preserve_end_marks', '0') == '1'
+
     try:
         text_content = file.read().decode('utf-8')
     except UnicodeDecodeError:
@@ -636,7 +685,7 @@ def _generate_html_inner():
         if not os.path.exists(template_path_old):
             return jsonify({'error': 'Old-format template file not found'}), 500
         html_old, err_old = generate_html_from_template(
-            data_items, template_path_old, list_no, list_date, title, whatsapp_number
+            data_items, template_path_old, list_no, list_date, title, whatsapp_number, preserve_end_marks
         )
         if err_old:
             return jsonify({'error': err_old}), 500
