@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Lists - Diff Checker</title>
+    <style>
+        :root {
+            --bg-primary: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            --bg-card: #ffffff;
+            --text-primary: #1a1a2e;
+            --text-secondary: #666;
+            --border-color: #e0e0e0;
+            --input-bg: #f8f9fa;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+            --bg-card: #1e1e2e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #aaa;
+            --border-color: #333;
+            --input-bg: #2a2a3e;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 70px 12px 20px;
+            min-height: 100vh;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        .nav-header {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: linear-gradient(135deg, rgba(26,26,46,0.95) 0%, rgba(22,33,62,0.95) 50%, rgba(15,52,96,0.95) 100%);
+            backdrop-filter: blur(10px);
+            z-index: 999;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; height: 60px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .logo-text { color: white; font-weight: 700; font-size: 1.2em; background: linear-gradient(135deg, #667eea, #f093fb);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .nav-links { display: flex; gap: 6px; }
+        .nav-link {
+            padding: 8px 14px; border-radius: 8px; text-decoration: none; color: rgba(255,255,255,0.8);
+            font-size: 13px; transition: all 0.2s; background: rgba(255,255,255,0.05);
+        }
+        .nav-link:hover { color: white; background: rgba(255,255,255,0.1); }
+        .nav-link.active { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .theme-toggle {
+            width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 16px;
+        }
+
+        .card { background: var(--bg-card); border-radius: 12px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border: 1px solid var(--border-color); }
+        .header { text-align: center; margin-bottom: 16px; }
+        .header h1 { font-size: 1.6em; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 4px; }
+        .header p { color: var(--text-secondary); font-size: 13px; }
+
+        .upload-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 768px) { .upload-section { grid-template-columns: 1fr; } }
+
+        .file-wrapper {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .file-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 24px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            background: var(--bg-card);
+            transition: all 0.3s ease;
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            width: 100%;
+            box-sizing: border-box;
+            position: relative;
+            gap: 16px;
+        }
+
+        .file-label:hover {
+            border-color: #667eea;
+            background: linear-gradient(135deg, rgba(102,118,234,0.02) 0%, rgba(118,75,162,0.02) 100%);
+            box-shadow: 0 4px 16px rgba(102,118,234,0.1);
+        }
+
+        .file-label.selected {
+            border-color: #10b981;
+            background: linear-gradient(135deg, rgba(16,185,129,0.02) 0%, rgba(5,150,105,0.02) 100%);
+            box-shadow: 0 4px 16px rgba(16,185,129,0.1);
+        }
+
+        .file-icon-box {
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            font-size: 28px;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+
+        .file-label.selected .file-icon-box {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            transform: scale(1.05);
+        }
+
+        .file-label:hover .file-icon-box {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102,118,234,0.2);
+        }
+
+        .file-info {
+            text-align: left;
+            flex: 1;
+        }
+
+        .file-label-text {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 15px;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .file-label-subtext {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 400;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .file-name {
+            display: block;
+            font-weight: 600;
+            color: #667eea;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .file-label.selected .file-name {
+            color: #10b981;
+        }
+
+        .file-label input {
+            position: absolute;
+            left: -9999px;
+            display: none;
+        }
+
+        .compare-area { display: grid; grid-template-columns: 240px 1fr; gap: 12px; }
+        @media (max-width: 1024px) { .compare-area { grid-template-columns: 1fr; } }
+
+        .stats-panel { background: var(--bg-card); border-radius: 10px; padding: 12px; border: 1px solid var(--border-color); }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; }
+        .stat-item { padding: 8px; border-radius: 8px; }
+        .stat-num { font-size: 24px; font-weight: 700; display: block; }
+        .stat-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; }
+        .stat-add .stat-num { color: #10b981; }
+        .stat-del .stat-num { color: #ef4444; }
+        .stat-chg .stat-num { color: #f59e0b; }
+        .stat-add { border-left: 3px solid #10b981; }
+        .stat-del { border-left: 3px solid #ef4444; }
+        .stat-chg { border-left: 3px solid #f59e0b; }
+
+        .compare-box { background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border-color); overflow: hidden; display: flex; flex-direction: column; }
+        .compare-header { padding: 10px 14px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .compare-header.added { background: #d1fae5; color: #065f46; border-bottom-color: #10b981; }
+        .compare-header.deleted { background: #fee2e2; color: #991b1b; border-bottom-color: #ef4444; }
+        .compare-header.changed { background: #fef3c7; color: #92400e; border-bottom-color: #f59e0b; }
+        .compare-list { max-height: 60vh; overflow-y: auto; }
+        .compare-item {
+            padding: 8px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-color); font-size: 13px;
+        }
+        .compare-item:last-child { border-bottom: none; }
+        .compare-item.added { background: #d1fae5; color: #065f46; }
+        .compare-item.deleted { background: #fee2e2; color: #991b1b; }
+        .compare-item.changed { background: #fef3c7; color: #92400e; }
+        .badge { font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+        .badge.added { background: #10b981; color: white; }
+        .badge.deleted { background: #ef4444; color: white; }
+        .badge.changed { background: #f59e0b; color: white; }
+        .code { font-family: monospace; color: #666; font-size: 12px; flex-shrink: 0; }
+        .item-info { flex: 1; }
+        .item-name { font-weight: 500; }
+        .item-details { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        .no-diffs { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
+        .no-diffs h3 { font-size: 18px; margin-bottom: 8px; }
+
+        .compare-btn {
+            width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea, #764ba2); color: white;
+            border: none; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 8px;
+        }
+        .compare-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,118,234,0.4); }
+        .compare-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .export-buttons { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .export-btn { flex: 1; min-width: 120px; padding: 10px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; color: white; font-size: 12px; transition: all 0.2s; }
+        .export-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .export-added { background: linear-gradient(135deg, #10b981, #059669); }
+        .export-deleted { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .export-changed { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+        .mobile-menu-btn { display: none; background: none; border: none; color: white; font-size: 20px; cursor: pointer; }
+        .mobile-nav { display: none; position: fixed; top: 60px; left: 0; right: 0; background: rgba(26,26,46,0.98); padding: 10px; z-index: 998; }
+        .mobile-nav.show { display: block; }
+        .mobile-nav .nav-link { display: block; padding: 12px; margin-bottom: 6px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <header class="nav-header">
+        <a href="/" class="nav-logo">
+            <div class="logo-icon">🔍</div>
+            <span class="logo-text">Diff Checker</span>
+        </a>
+        <nav class="nav-links">
+            <a href="/" class="nav-link" data-page="home">🏠 Home</a>
+            <a href="/make-html" class="nav-link" data-page="make-html">✨ Make HTML</a>
+            <a href="/search" class="nav-link" data-page="search">🔍 Search</a>
+            <a href="/diff" class="nav-link active" data-page="diff">📊 Compare</a>
+        </nav>
+        <div style="display:flex;gap:8px;align-items:center">
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
+            <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()">☰</button>
+        </div>
+    </header>
+    <nav class="mobile-nav" id="mobileNav">
+        <a href="/" class="nav-link" onclick="toggleMobileMenu()">🏠 Home</a>
+        <a href="/make-html" class="nav-link" onclick="toggleMobileMenu()">✨ Make HTML</a>
+        <a href="/search" class="nav-link" onclick="toggleMobileMenu()">🔍 Search</a>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>Compare Medicine Lists</h1>
+            <p>Upload two HTML files to see what changed</p>
+        </div>
+
+        <div class="card">
+            <div class="upload-section">
+                <div class="file-wrapper">
+                    <label class="file-label" onclick="document.getElementById('oldFile').click()">
+                        <div class="file-icon-box">📋</div>
+                        <div class="file-info">
+                            <span class="file-label-text">Old File</span>
+                            <span class="file-label-subtext">Upload before version</span>
+                            <span class="file-name" id="oldFileName">Click to select</span>
+                        </div>
+                        <input type="file" id="oldFile" accept=".htm,.html" onchange="loadFile(this, 'old')">
+                    </label>
+                </div>
+                <div class="file-wrapper">
+                    <label class="file-label" onclick="document.getElementById('newFile').click()">
+                        <div class="file-icon-box">📋</div>
+                        <div class="file-info">
+                            <span class="file-label-text">New File</span>
+                            <span class="file-label-subtext">Upload after version</span>
+                            <span class="file-name" id="newFileName">Click to select</span>
+                        </div>
+                        <input type="file" id="newFile" accept=".htm,.html" onchange="loadFile(this, 'new')">
+                    </label>
+                </div>
+            </div>
+            <button id="compareBtn" class="compare-btn" disabled onclick="compareLists()">Compare Files</button>
+
+            <div id="compareResults" style="display:none; margin-top:16px;">
+                <div class="export-buttons">
+                    <button onclick="switchExport('added')" class="export-btn export-added">⬇️ Export Added</button>
+                    <button onclick="switchExport('deleted')" class="export-btn export-deleted">⬇️ Export Deleted</button>
+                    <button onclick="switchExport('changed')" class="export-btn export-changed">⬇️ Export Changed</button>
+                </div>
+
+                <div id="exportPreview" style="display:none; margin-bottom:16px;">
+                    <div style="background:var(--input-bg);border-radius:10px;border:1px solid var(--border-color);padding:14px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                            <h3 style="margin:0;font-size:14px;">📋 Copy Results Below:</h3>
+                            <button onclick="copyToClipboard()" style="padding:6px 12px;background:#667eea;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;">📋 Copy All</button>
+                        </div>
+                        <textarea id="exportText" style="width:100%;height:300px;padding:10px;border:1px solid var(--border-color);border-radius:8px;font-family:monospace;font-size:12px;background:var(--bg-card);color:var(--text-primary);resize:vertical;"></textarea>
+                    </div>
+                </div>
+
+                <div class="compare-area">
+                    <div class="stats-panel">
+                        <div class="stats-grid">
+                            <div class="stat-item stat-add">
+                                <span class="stat-num" id="statAdded">0</span>
+                                <span class="stat-label">Added</span>
+                            </div>
+                            <div class="stat-item stat-del">
+                                <span class="stat-num" id="statDeleted">0</span>
+                                <span class="stat-label">Deleted</span>
+                            </div>
+                            <div class="stat-item stat-chg">
+                                <span class="stat-num" id="statChanged">0</span>
+                                <span class="stat-label">Changed</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="compare-box">
+                        <div class="compare-header added">
+                            <span>Items Added (New)</span>
+                            <span class="badge added">NEW</span>
+                        </div>
+                        <div class="compare-list" id="addedList"></div>
+                        <div id="addedEmpty" class="no-diffs"><h3>✅ No items added</h3></div>
+                    </div>
+                </div>
+
+                <div class="compare-area" style="margin-top:12px;">
+                    <div class="stats-panel">
+                        <div class="stats-grid">
+                            <div class="stat-item stat-del">
+                                <span class="stat-num" id="statDel2">0</span>
+                                <span class="stat-label">Deleted</span>
+                            </div>
+                            <div class="stat-item stat-chg">
+                                <span class="stat-num" id="statChg2">0</span>
+                                <span class="stat-label">Changed</span>
+                            </div>
+                            <div class="stat-item stat-add">
+                                <span class="stat-num" id="statAdd2">0</span>
+                                <span class="stat-label">Added</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="compare-box">
+                        <div class="compare-header deleted">
+                            <span>Items Deleted (Old)</span>
+                            <span class="badge deleted">DEL</span>
+                        </div>
+                        <div class="compare-list" id="deletedList"></div>
+                        <div id="deletedEmpty" class="no-diffs"><h3>✅ No items deleted</h3></div>
+                    </div>
+                </div>
+
+                <div class="compare-area" style="margin-top:12px;">
+                    <div class="stats-panel">
+                        <div class="stats-grid">
+                            <div class="stat-item stat-chg">
+                                <span class="stat-num" id="statChg3">0</span>
+                                <span class="stat-label">Changed</span>
+                            </div>
+                            <div class="stat-item stat-add">
+                                <span class="stat-num" id="statAdd3">0</span>
+                                <span class="stat-label">Added</span>
+                            </div>
+                            <div class="stat-item stat-del">
+                                <span class="stat-num" id="statDel3">0</span>
+                                <span class="stat-label">Deleted</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="compare-box">
+                        <div class="compare-header changed">
+                            <span>Items with Discount Changes</span>
+                            <span class="badge changed">⚡</span>
+                        </div>
+                        <div class="compare-list" id="changedList"></div>
+                        <div id="changedEmpty" class="no-diffs"><h3>✅ No discount changes</h3></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let oldData = { items: [], hasData: false };
+        let newData = { items: [], hasData: false };
+        let lastComparison = { added: [], deleted: [], changed: [] };
+
+        function toggleTheme() {
+            const body = document.body;
+            const toggle = document.getElementById('themeToggle');
+            if (body.getAttribute('data-theme') === 'dark') {
+                body.removeAttribute('data-theme');
+                toggle.textContent = '🌙';
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                toggle.textContent = '☀️';
+            }
+        }
+
+        function toggleMobileMenu() {
+            document.getElementById('mobileNav').classList.toggle('show');
+        }
+
+        function loadFile(input, type) {
+            const file = input.files[0];
+            if (!file) return;
+            const nameSpan = document.getElementById(type + 'FileName');
+            nameSpan.textContent = file.name;
+            input.parentElement.classList.add('selected');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const items = parseItems(e.target.result);
+                if (type === 'old') {
+                    oldData = { items: items, hasData: true };
+                } else {
+                    newData = { items: items, hasData: true };
+                }
+                checkReady();
+            };
+            reader.readAsText(file);
+        }
+
+        function checkReady() {
+            const btn = document.getElementById('compareBtn');
+            btn.disabled = !(oldData.hasData && newData.hasData);
+        }
+
+        function parseItems(html) {
+            const items = [];
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            // Strategy 1: New format with item-row and cell-name class
+            let rows = doc.querySelectorAll('tr.item-row');
+            if (rows.length > 0) {
+                rows.forEach(row => {
+                    const nameCell = row.querySelector('.cell-name');
+                    if (!nameCell) return;
+                    const name = nameCell.textContent.trim();
+                    if (!name) return;
+                    const disc = row.getAttribute('data-disc') || '';
+                    const code = row.getAttribute('data-id') || '';
+                    const tp = row.getAttribute('data-tp') || '';
+                    items.push({ name, code, disc, tp });
+                });
+                return items;
+            }
+
+            // Strategy 2: Stock format with tr.item (SR#, Code, Name, Disc%, TP, Qty...)
+            rows = doc.querySelectorAll('tr.item');
+            if (rows.length > 0) {
+                rows.forEach(row => {
+                    const tds = row.querySelectorAll('td');
+                    if (tds.length < 4) return;
+
+                    // Format: [SR#, Code, ItemName, Disc%, TP, Qty, Bonus, NetPrice, Total]
+                    const code = tds[1] ? tds[1].textContent.trim() : '';
+                    const name = tds[2] ? tds[2].textContent.trim() : '';
+                    const disc = tds[3] ? tds[3].textContent.trim().replace('%', '') : '';
+                    const tp = tds[4] ? tds[4].textContent.trim() : '';
+
+                    if (name && name.length > 2) {
+                        items.push({ name, code, disc, tp });
+                    }
+                });
+                if (items.length > 0) return items;
+            }
+
+            // Strategy 3: Generic tbody tr format
+            rows = doc.querySelectorAll('tbody tr');
+            let genericItems = [];
+
+            rows.forEach(row => {
+                const tds = row.querySelectorAll('td');
+                if (tds.length < 2) return;
+
+                let code = '', name = '', disc = '', tp = '';
+
+                if (tds.length >= 3) {
+                    const col0 = tds[0].textContent.trim();
+                    const col1 = tds[1].textContent.trim();
+                    const col2 = tds[2].textContent.trim();
+                    const col3 = tds.length > 3 ? tds[3].textContent.trim() : '';
+
+                    if (/^\d+$/.test(col0) && col0.length <= 3) {
+                        code = col1;
+                        name = col2;
+                        disc = col3;
+                    } else {
+                        code = col0;
+                        name = col1;
+                        disc = col2;
+                    }
+
+                    if (name && name.length > 3 && !(/^\d+$/.test(name))) {
+                        genericItems.push({ name, code, disc: disc.replace('%', ''), tp });
+                    }
+                }
+            });
+
+            return genericItems.length > 0 ? genericItems : items;
+        }
+
+        function compareLists() {
+            if (!oldData.hasData || !newData.hasData) return;
+            const oldMap = new Map(oldData.items.map(i => [i.name, i]));
+            const newMap = new Map(newData.items.map(i => [i.name, i]));
+            const added = [], deleted = [], changed = [];
+
+            newData.items.forEach(item => {
+                if (!oldMap.has(item.name)) added.push(item);
+            });
+
+            oldData.items.forEach(item => {
+                if (!newMap.has(item.name)) deleted.push(item);
+            });
+
+            oldData.items.forEach(oldItem => {
+                const newItem = newMap.get(oldItem.name);
+                if (newItem) {
+                    const discChanged = (newItem.disc || '') !== (oldItem.disc || '');
+                    const priceChanged = (newItem.tp || '') !== (oldItem.tp || '');
+
+                    if (discChanged || priceChanged) {
+                        changed.push({
+                            name: oldItem.name,
+                            oldDisc: oldItem.disc || '0.00',
+                            newDisc: newItem.disc || '0.00',
+                            oldPrice: oldItem.tp || '',
+                            newPrice: newItem.tp || '',
+                            code: newItem.code,
+                            tp: newItem.tp,
+                            discChanged,
+                            priceChanged
+                        });
+                    }
+                }
+            });
+
+            lastComparison = { added, deleted, changed };
+
+            document.getElementById('statAdded').textContent = added.length;
+            document.getElementById('statDeleted').textContent = deleted.length;
+            document.getElementById('statChanged').textContent = changed.length;
+            document.getElementById('statDel2').textContent = deleted.length;
+            document.getElementById('statChg2').textContent = changed.length;
+            document.getElementById('statAdd2').textContent = added.length;
+            document.getElementById('statChg3').textContent = changed.length;
+            document.getElementById('statAdd3').textContent = added.length;
+            document.getElementById('statDel3').textContent = deleted.length;
+
+            renderList('addedList', added, 'added');
+            renderList('deletedList', deleted, 'deleted');
+            renderList('changedList', changed, 'changed', true);
+
+            document.getElementById('addedEmpty').style.display = added.length === 0 ? 'block' : 'none';
+            document.getElementById('deletedEmpty').style.display = deleted.length === 0 ? 'block' : 'none';
+            document.getElementById('changedEmpty').style.display = changed.length === 0 ? 'block' : 'none';
+
+            document.getElementById('compareResults').style.display = 'block';
+        }
+
+        function renderList(containerId, items, type, isChanged = false) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = items.map((item, idx) => {
+                if (isChanged) {
+                    let changeDetails = '';
+                    if (item.discChanged) {
+                        changeDetails += `Disc: ${escapeHtml(item.oldDisc)}% → ${escapeHtml(item.newDisc)}%`;
+                    }
+                    if (item.priceChanged) {
+                        if (changeDetails) changeDetails += ' | ';
+                        changeDetails += `Price: ${escapeHtml(item.oldPrice)} → ${escapeHtml(item.newPrice)}`;
+                    }
+
+                    return `<div class="compare-item changed">
+                        <span class="badge changed">⚡</span>
+                        <div class="item-info">
+                            <div class="item-name">${escapeHtml(item.name)}</div>
+                            <div class="item-details">${changeDetails}</div>
+                        </div>
+                        ${item.code ? `<span class="code">${escapeHtml(item.code)}</span>` : ''}
+                    </div>`;
+                }
+                return `<div class="compare-item ${type}">
+                    <span class="badge ${type}">${type.toUpperCase().substr(0,3)}</span>
+                    <div class="item-info">
+                        <div class="item-name">${escapeHtml(item.name)}</div>
+                        ${item.disc ? `<div class="item-details">Disc: ${escapeHtml(item.disc)}% | Price: ${escapeHtml(item.tp)}</div>` : ''}
+                    </div>
+                    ${item.code ? `<span class="code">${escapeHtml(item.code)}</span>` : ''}
+                </div>`;
+            }).join('');
+        }
+
+        function switchExport(type) {
+            let items = [];
+
+            if (type === 'added') {
+                items = lastComparison.added;
+            } else if (type === 'deleted') {
+                items = lastComparison.deleted;
+            } else if (type === 'changed') {
+                items = lastComparison.changed;
+            }
+
+            if (items.length === 0) {
+                alert('No items to export');
+                return;
+            }
+
+            let content = '';
+            if (type === 'changed') {
+                items.forEach(item => {
+                    const disc = item.newDisc || '0.00';
+                    const tp = item.tp || '';
+                    const spaces = Math.max(0, 35 - item.name.length - disc.length);
+                    const line = `${item.name}----- ${disc}%${' '.repeat(spaces)} | ${tp} |  | 0.00`;
+                    content += line + '\n';
+                });
+            } else {
+                items.forEach(item => {
+                    const disc = item.disc || '0.00';
+                    const tp = item.tp || '';
+                    const spaces = Math.max(0, 35 - item.name.length - disc.length);
+                    const line = `${item.name}----- ${disc}%${' '.repeat(spaces)} | ${tp} |  | 0.00`;
+                    content += line + '\n';
+                });
+            }
+
+            document.getElementById('exportText').value = content;
+            document.getElementById('exportPreview').style.display = 'block';
+            document.getElementById('exportText').focus();
+            document.getElementById('exportText').select();
+        }
+
+        function copyToClipboard() {
+            const textarea = document.getElementById('exportText');
+            textarea.select();
+            document.execCommand('copy');
+            alert('✅ Copied to clipboard!');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        (function() {
+            const currentPage = window.location.pathname;
+            document.querySelectorAll('.nav-link').forEach(link => {
+                if (link.getAttribute('href') === currentPage) {
+                    link.classList.add('active');
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

@@ -764,6 +764,11 @@ def preview_html_new():
 def search_page():
     return render_template('search.html')
 
+
+@app.route('/diff')
+def diff_page():
+    return render_template('diff.html')
+
 import atexit
 import shutil
 import tempfile
