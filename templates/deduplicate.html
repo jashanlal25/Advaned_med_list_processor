@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deduplicate - MediList Pro</title>
+    <style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        min-height: 100vh;
+        padding: 20px;
+        padding-top: 80px;
+        transition: all 0.3s ease;
+    }
+
+    .tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tab-btn {
+        padding: 10px 20px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 0.95em;
+        color: #666;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s;
+        font-weight: 600;
+    }
+
+    .tab-btn.active {
+        color: #667eea;
+        border-bottom-color: #667eea;
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    textarea {
+        width: 100%;
+        min-height: 250px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 14px;
+        line-height: 1.5;
+        resize: vertical;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.9em;
+        transition: all 0.3s;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+        background: #f0f0f0;
+        color: #333;
+    }
+
+    .btn-copy {
+        background: #0d6efd;
+        color: white;
+        padding: 8px 16px;
+        font-size: 0.85em;
+    }
+
+    .loading {
+        display: none;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .loading.show {
+        display: block;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 10px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .results-section {
+        display: none;
+        margin-top: 30px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .results-section.show {
+        display: block !important;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .stat-label {
+        font-size: 0.85em;
+        opacity: 0.95;
+        margin-bottom: 8px;
+    }
+
+    .stat-number {
+        font-size: 2.2em;
+        font-weight: 700;
+    }
+
+    .results-tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+        border-bottom: 2px solid #ddd;
+        flex-wrap: wrap;
+    }
+
+    .result-tab-btn {
+        padding: 8px 16px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 0.9em;
+        color: #666;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s;
+        font-weight: 600;
+    }
+
+    .result-tab-btn.active {
+        color: #667eea;
+        border-bottom-color: #667eea;
+    }
+
+    .result-tab-content {
+        display: none;
+    }
+
+    .result-tab-content.active {
+        display: block !important;
+    }
+
+    .output-box {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 15px;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 14px;
+        min-height: 400px;
+        max-height: 600px;
+        overflow-y: auto;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: #333;
+    }
+
+    .split-view-wrapper {
+        display: flex;
+        gap: 0;
+        margin-top: 15px;
+        border: 2px solid #667eea;
+        border-radius: 6px;
+        overflow: hidden;
+        height: 650px;
+        background: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.1);
+    }
+
+    .split-column {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        overflow: hidden;
+        min-width: 300px;
+    }
+
+    .split-header {
+        font-weight: 700;
+        padding: 12px 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-size: 0.95em;
+        flex-shrink: 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .row-badge {
+        background: rgba(255, 255, 255, 0.3);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.9em;
+    }
+
+    .split-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 15px;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .split-editable {
+        border: none;
+        resize: none;
+        background: white;
+        color: #333;
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
+        padding: 15px;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .split-divider {
+        width: 12px;
+        background: linear-gradient(90deg, transparent, #ddd, transparent);
+        cursor: col-resize;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        user-select: none;
+        flex-shrink: 0;
+    }
+
+    .split-divider:hover {
+        background: linear-gradient(90deg, transparent, #667eea, transparent);
+    }
+
+    .divider-dot {
+        width: 2px;
+        height: 40px;
+        background: #667eea;
+        border-radius: 1px;
+        pointer-events: none;
+    }
+
+    .success-message,
+    .error-message {
+        display: none;
+        padding: 12px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        font-weight: 500;
+    }
+
+    .success-message.show {
+        display: block;
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+
+    .error-message.show {
+        display: block;
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .container-page {
+        max-width: 1400px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+
+    .content-page {
+        padding: 30px;
+    }
+</style>
+</head>
+<body>
+    {% include 'navbar_component.html' %}
+
+<div class="container-page">
+    <div class="content-page">
+        <div class="success-message" id="successMessage"></div>
+        <div class="error-message" id="errorMessage"></div>
+        <div class="loading" id="loading"><div class="spinner"></div><p>Processing...</p></div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('paste')">📝 Paste Text</button>
+            <button class="tab-btn" onclick="switchTab('upload')">📁 Upload File</button>
+        </div>
+
+        <div id="paste" class="tab-content active">
+            <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <label style="font-weight: 600; color: #333; margin: 0;">Paste your medicine list (Format: Name----- discount%)</label>
+                <span id="rowCounter" style="background: #667eea; color: white; padding: 8px 16px; border-radius: 20px; font-size: 0.9em; font-weight: 600;">Rows: 0</span>
+            </div>
+            <textarea id="pasteTextarea" placeholder="Example:&#10;Zolrest 600 Tab----- 27.00%&#10;Zolrest 600 Tab----- 25.00%&#10;Aspirin 100mg----- 10.00%" oninput="updateRowCount()"></textarea>
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="deduplicateText()">▶ Run Deduplication</button>
+                <button class="btn btn-secondary" onclick="clearText()">🗑 Clear</button>
+            </div>
+        </div>
+
+        <div id="upload" class="tab-content">
+            <p style="margin-bottom: 15px; color: #666;">📁 Drag your file here or click to browse</p>
+            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">📂 Choose File</button>
+            <input type="file" id="fileInput" accept=".txt,.text,.md" style="display: none;" onchange="handleFileUpload()" />
+            <p style="margin-top: 10px; color: #666; font-size: 0.85em;">Supported: .txt, .text, .md</p>
+        </div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="stats-grid" id="statsGrid"></div>
+
+            <div class="results-tabs">
+                <button class="result-tab-btn active" onclick="switchResultTab('deduplicated')">✓ Deduplicated Data</button>
+                <button class="result-tab-btn" onclick="switchResultTab('removedList')">📋 Removed List</button>
+            </div>
+
+            <div id="deduplicated" class="result-tab-content active">
+                <label style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; cursor: pointer;">
+                    <input type="checkbox" id="splitViewToggle" onchange="toggleSplitView()" style="width: 18px; height: 18px;">
+                    <span style="font-weight: 600;">Compare with Removed Items (Click and DRAG the middle line)</span>
+                </label>
+
+                <div id="singleView">
+                    <div style="margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-copy" onclick="copyToClipboard('deduplicatedOutput')">📋 Copy</button>
+                        <button class="btn btn-copy" onclick="downloadAsText()">⬇ Download</button>
+                        <button class="btn btn-copy" onclick="cleanFormatOutput()">🧹 Clean Format</button>
+                    </div>
+                    <div id="deduplicatedOutput" class="output-box"></div>
+                </div>
+
+                <div id="splitView" style="display: none;">
+                    <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <input type="text" id="searchBox" placeholder="🔍 Search items..." style="flex: 1; min-width: 250px; padding: 10px 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: 'Segoe UI', sans-serif;">
+                        <button class="btn btn-secondary" onclick="clearSearch()">Clear</button>
+                    </div>
+
+                    <div class="split-view-wrapper">
+                        <div class="split-column">
+                            <div class="split-header">
+                                <span>✓ Deduplicated Data (Kept)</span>
+                                <span class="row-badge" id="leftRowCount">Rows: 0</span>
+                            </div>
+                            <textarea id="leftContent" class="split-editable"></textarea>
+                        </div>
+
+                        <div class="split-divider" id="divider" style="cursor: col-resize;" onmousedown="startDrag(event)">
+                            <div class="divider-dot"></div>
+                        </div>
+
+                        <div class="split-column">
+                            <div class="split-header">
+                                <span>✗ Removed Items (Deleted)</span>
+                                <span class="row-badge" id="rightRowCount">Rows: 0</span>
+                            </div>
+                            <div id="rightContent" class="split-content"></div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-copy" onclick="copyToClipboard('leftContent')">📋 Copy Kept</button>
+                        <button class="btn btn-copy" onclick="copyToClipboard('rightContent')">📋 Copy Removed</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="removedList" class="result-tab-content">
+                <p style="color: #666; margin-bottom: 10px;">ℹ️ All removed items in clean format</p>
+                <div style="margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-copy" onclick="copyToClipboard('removedListOutput')">📋 Copy All</button>
+                    <button class="btn btn-copy" onclick="downloadRemovedAsText()">⬇ Download</button>
+                    <button class="btn btn-copy" onclick="cleanFormatRemoved()">🧹 Clean Format</button>
+                </div>
+                <div id="removedListOutput" class="output-box"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentData = null;
+    let currentToken = null;
+    let isResizing = false;
+    let originalLeftContent = '';
+    let originalRightContent = '';
+
+    function startDrag(e) {
+        isResizing = true;
+        const wrapper = document.querySelector('.split-view-wrapper');
+        const leftCol = wrapper.querySelector('.split-column:first-child');
+        const startX = e.clientX;
+        const startWidth = leftCol.offsetWidth;
+        const wrapperWidth = wrapper.offsetWidth;
+
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        function onMouseMove(e) {
+            if (!isResizing) return;
+            const diff = e.clientX - startX;
+            const newWidth = startWidth + diff;
+
+            if (newWidth > 300 && newWidth < wrapperWidth - 320) {
+                leftCol.style.flex = `0 0 ${newWidth}px`;
+                wrapper.querySelector('.split-column:last-child').style.flex = '1 1 auto';
+            }
+        }
+
+        function onMouseUp() {
+            isResizing = false;
+            document.body.style.cursor = 'auto';
+            document.body.style.userSelect = 'auto';
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        }
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        e.preventDefault();
+    }
+
+    function searchItems() {
+        const searchBox = document.getElementById('searchBox');
+        if (!searchBox) return;
+
+        const searchTerm = searchBox.value.toLowerCase().trim();
+        const leftContent = document.getElementById('leftContent');
+        const rightContent = document.getElementById('rightContent');
+
+        if (!searchTerm) {
+            leftContent.value = originalLeftContent;
+            rightContent.textContent = originalRightContent;
+        } else {
+            const leftLines = originalLeftContent.split('\n');
+            const filteredLeft = leftLines.filter(line =>
+                line.toLowerCase().includes(searchTerm)
+            ).join('\n');
+            leftContent.value = filteredLeft;
+
+            const rightLines = originalRightContent.split('\n');
+            const filteredRight = rightLines.filter(line =>
+                line.toLowerCase().includes(searchTerm)
+            ).join('\n');
+            rightContent.textContent = filteredRight;
+        }
+
+        const leftRows = leftContent.value.split('\n').filter(l => l.trim()).length;
+        const rightRows = rightContent.textContent.split('\n').filter(l => l.trim()).length;
+        document.getElementById('leftRowCount').textContent = `Rows: ${leftRows}`;
+        document.getElementById('rightRowCount').textContent = `Rows: ${rightRows}`;
+    }
+
+    function clearSearch() {
+        const searchBox = document.getElementById('searchBox');
+        if (searchBox) {
+            searchBox.value = '';
+            searchItems();
+        }
+    }
+
+    function updateRowCount() {
+        const textarea = document.getElementById('pasteTextarea');
+        const text = textarea.value.trim();
+        const rows = text ? text.split('\n').filter(l => l.includes('-----')).length : 0;
+        document.getElementById('rowCounter').textContent = `Rows: ${rows}`;
+    }
+
+    function switchTab(name) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(name).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    function switchResultTab(name) {
+        document.querySelectorAll('.result-tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.result-tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(name).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    function toggleSplitView() {
+        const toggle = document.getElementById('splitViewToggle').checked;
+        document.getElementById('singleView').style.display = toggle ? 'none' : 'block';
+        document.getElementById('splitView').style.display = toggle ? 'block' : 'none';
+
+        if (toggle && currentData) {
+            const dedup = currentData.deduplicated_text || '';
+            const removed = currentData.removed_text || '';
+
+            originalLeftContent = dedup;
+
+            const cleanedRemoved = removed.split('\n').map(line => {
+                if (!line.trim() || !line.includes('-----')) return '';
+                return line.replace(/\s+\|/g, ' |').trim();
+            }).filter(line => line).join('\n');
+
+            originalRightContent = cleanedRemoved;
+
+            document.getElementById('leftContent').value = originalLeftContent;
+            document.getElementById('rightContent').textContent = originalRightContent;
+
+            document.getElementById('searchBox').value = '';
+
+            const dedupRows = dedup ? dedup.split('\n').filter(l => l.trim()).length : 0;
+            const removedRows = cleanedRemoved ? cleanedRemoved.split('\n').filter(l => l.trim()).length : 0;
+            document.getElementById('leftRowCount').textContent = `Rows: ${dedupRows}`;
+            document.getElementById('rightRowCount').textContent = `Rows: ${removedRows}`;
+
+            setTimeout(() => {
+                const searchBox = document.getElementById('searchBox');
+                if (searchBox) {
+                    searchBox.removeEventListener('keyup', searchItems);
+                    searchBox.removeEventListener('input', searchItems);
+                    searchBox.addEventListener('keyup', searchItems);
+                    searchBox.addEventListener('input', searchItems);
+                }
+            }, 100);
+        }
+    }
+
+    function deduplicateText() {
+        const text = document.getElementById('pasteTextarea').value;
+        if (!text.trim()) { showError('Please paste text'); return; }
+        const blob = new Blob([text], { type: 'text/plain' });
+        const formData = new FormData();
+        formData.append('file', blob, 'paste.txt');
+        processFile(formData);
+    }
+
+    function handleFileUpload() {
+        const file = document.getElementById('fileInput').files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('file', file);
+        processFile(formData);
+    }
+
+    function processFile(formData) {
+        showLoading(true);
+        fetch('/deduplicate-upload', { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(data => {
+                showLoading(false);
+                if (data.error) { showError(data.error); return; }
+                currentData = data;
+                currentToken = data.download_token;
+
+                document.getElementById('statsGrid').innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-label">Original</div>
+                        <div class="stat-number">${data.stats.original_count}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Unique</div>
+                        <div class="stat-number">${data.stats.unique_count}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Removed</div>
+                        <div class="stat-number">${data.stats.duplicates_removed}</div>
+                    </div>
+                `;
+
+                document.getElementById('deduplicatedOutput').textContent = data.deduplicated_text || '';
+                document.getElementById('removedListOutput').textContent = data.removed_text || '(No items)';
+                document.getElementById('resultsSection').classList.add('show');
+                setTimeout(() => document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' }), 100);
+                showSuccess('✓ Done!');
+            })
+            .catch(err => { showLoading(false); showError(err.message); });
+    }
+
+    function copyToClipboard(id) {
+        const el = document.getElementById(id);
+        const text = el.textContent || el.value;
+        navigator.clipboard.writeText(text).then(() => alert('✓ Copied!')).catch(() => alert('Failed'));
+    }
+
+    function cleanFormatOutput() {
+        const output = document.getElementById('deduplicatedOutput');
+        const text = output.textContent;
+        const cleaned = text.split('\n').map(line => {
+            if (!line.trim() || !line.includes('-----')) return '';
+            return line.replace(/\s+\|/g, ' |').trim();
+        }).filter(line => line).join('\n');
+        output.textContent = cleaned;
+        alert('✓ Format cleaned!');
+    }
+
+    function cleanFormatRemoved() {
+        const output = document.getElementById('removedListOutput');
+        const text = output.textContent;
+        const cleaned = text.split('\n').map(line => {
+            if (!line.trim() || !line.includes('-----')) return '';
+            return line.replace(/\s+\|/g, ' |').trim();
+        }).filter(line => line).join('\n');
+        output.textContent = cleaned;
+        alert('✓ Format cleaned!');
+    }
+
+    function downloadAsText() {
+        if (currentToken) window.location.href = `/download?token=${currentToken}`;
+    }
+
+    function downloadRemovedAsText() {
+        if (currentData?.removed_token) window.location.href = `/download?token=${currentData.removed_token}`;
+    }
+
+    function clearText() {
+        document.getElementById('pasteTextarea').value = '';
+        document.getElementById('resultsSection').classList.remove('show');
+        updateRowCount();
+    }
+
+    function showLoading(show) { document.getElementById('loading').classList.toggle('show', show); }
+    function showError(msg) { const el = document.getElementById('errorMessage'); el.textContent = msg; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 5000); }
+    function showSuccess(msg) { const el = document.getElementById('successMessage'); el.textContent = msg; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 3000); }
+</script>
+</body>
+</html>

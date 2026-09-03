@@ -277,7 +277,15 @@ def generate_text_output(results, separator=',', extended=False):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', current_page='home')
+
+@app.route('/deduplicate')
+def deduplicate():
+    return render_template('deduplicate.html', current_page='deduplicate')
+
+@app.route('/make_html')
+def make_html():
+    return render_template('make_html.html', current_page='make_html')
 
 @app.route('/share', methods=['POST', 'GET'])
 def share():
@@ -369,6 +377,298 @@ def download_file():
         download_name=data['filename'],
         mimetype='text/plain'
     )
+
+# ============ DEDUPLICATION FUNCTIONALITY ============
+
+def normalize_name(name):
+    """Normalize item name for matching.
+
+    Removes extra spaces, punctuation, and standardizes format to catch variations.
+    Examples:
+    - "Augmentin 625 Tab" == "Augmentin 625Mg Tab."
+    - "Betaderm N M Cream" == "Betaderm Nm Cream"
+    - "Tab" == "Tab." == "Tablet"
+    """
+    name = name.lower().strip()
+
+    # Remove special characters completely (backtick, period, comma, hyphen, etc.)
+    name = re.sub(r'[`.,;:\'\"-]', '', name)
+
+    # Remove/normalize dosage units: 625mg, 625 mg, 625Mg all become 625
+    name = re.sub(r'(\d+)\s*(?:mg|ml|mcg|iu|units?)', r'\1', name)
+
+    # Normalize common abbreviations
+    name = re.sub(r'\btabs?\b', 'tablet', name)  # Tab, Tabs -> Tablet
+    name = re.sub(r'\btablet\b', 'tablet', name)  # Standardize
+    name = re.sub(r'\bcaps?\b', 'capsule', name)  # Cap, Caps -> Capsule
+    name = re.sub(r'\binjs?\b', 'injection', name)  # Inj, Injs -> Injection
+    name = re.sub(r'\bsyp\b', 'syrup', name)  # Syp -> Syrup
+    name = re.sub(r'\bsyrup\b', 'syrup', name)  # Standardize
+    name = re.sub(r'\bcream\b', 'cream', name)
+    name = re.sub(r'\bointment\b', 'ointment', name)
+
+    # Remove spaces between single letters (N M -> NM)
+    name = re.sub(r'\b([a-z])\s+([a-z])\b', r'\1\2', name)
+
+    # Clean up spaces
+    name = ' '.join(name.split())
+
+    # Handle common typos
+    name = name.replace('alvostan', 'alvoston')
+
+    # Remove variant descriptors
+    name = re.sub(r'\b(new|old|fresh|large|small|platinum|generic|standard)\b', '', name)
+    name = re.sub(r'\b(bosch|sami|hilton|getz|abbott|abbot|horizon|searle|martin dow|highnoon)\b', '', name)
+
+    # Final cleanup
+    name = ' '.join(name.split())
+
+    return name
+
+def quick_match(norm1, norm2):
+    """Fast matching - checks if names are likely the same item.
+
+    Uses quick heuristics instead of expensive Levenshtein distance.
+    """
+    if norm1 == norm2:
+        return True
+
+    # If one name is contained in the other (after normalization)
+    if len(norm1) > 5 and len(norm2) > 5:
+        if norm1 in norm2 or norm2 in norm1:
+            return True
+
+    # Split into tokens and compare
+    tokens1 = set(norm1.split())
+    tokens2 = set(norm2.split())
+
+    # If they share significant common tokens
+    common = tokens1 & tokens2
+    total = tokens1 | tokens2
+
+    if len(total) > 0:
+        similarity = len(common) / len(total)
+        # If 70% or more tokens match, consider them the same
+        if similarity >= 0.70:
+            return True
+
+    return False
+
+def clean_removed_line(line):
+    """Normalize spacing in a removed line so the removed-items output reads cleanly.
+
+    Collapses runs of whitespace around the "-----" separator and trims the ends,
+    keeping the original "Name----- value" shape.
+    """
+    line = line.strip()
+    if '-----' not in line:
+        return re.sub(r'\s+', ' ', line)
+
+    name, _, value = line.partition('-----')
+    name = re.sub(r'\s+', ' ', name).strip()
+    value = re.sub(r'\s+', ' ', value).strip()
+    return f'{name}----- {value}' if value else f'{name}-----'
+
+def deduplicate_items(text_content):
+    """Deduplicate items by keeping the highest discount percentage for each item name.
+
+    Uses fast matching to catch similar names (e.g., "Alvostan" vs "Alvoston").
+
+    Returns: (deduplicated_text, removed_text, stats_dict)
+    """
+    best_items = {}
+    order = []
+    all_items = []
+    name_groups = {}  # Track which names map to which canonical name
+
+    for line in text_content.split('\n'):
+        line = line.strip()
+        if not line or '-----' not in line:
+            continue
+
+        # Split by ----- to separate item name from details
+        parts = line.split('-----', 1)
+        if len(parts) < 2:
+            continue
+
+        # Extract item name (remove line number if present)
+        name_part = parts[0].strip()
+        if '\t' in name_part:
+            name_part = name_part.split('\t', 1)[1].strip()
+
+        item_name = name_part
+
+        # Extract percentage value from the second part
+        details = parts[1]
+        match = re.search(r'(\d+\.?\d*)%', details)
+
+        if match:
+            try:
+                discount_value = float(match.group(1))
+            except ValueError:
+                discount_value = -1.0
+        else:
+            discount_value = -1.0
+
+        all_items.append((item_name, discount_value, line))
+
+        # Normalize name for matching
+        normalized = normalize_name(item_name)
+
+        # Find canonical name (group key)
+        canonical_name = None
+
+        # Check if we already have this exact normalized name
+        if normalized in name_groups:
+            canonical_name = name_groups[normalized]
+        else:
+            # Check for similar names using FAST matching
+            for existing_norm, existing_canonical in name_groups.items():
+                if quick_match(normalized, existing_norm):
+                    canonical_name = existing_canonical
+                    break
+
+        # If no match found, this is a new group
+        if canonical_name is None:
+            canonical_name = item_name
+            name_groups[normalized] = canonical_name
+
+        # Track this name under its canonical form
+        if canonical_name not in best_items:
+            best_items[canonical_name] = (discount_value, line, item_name)
+            order.append(canonical_name)
+        else:
+            # Update if current discount is higher
+            if discount_value > best_items[canonical_name][0]:
+                best_items[canonical_name] = (discount_value, line, item_name)
+
+    # Build output for kept items - KEEP ORIGINAL FORMAT
+    output_lines = [best_items[name][1] for name in order]
+    output_text = '\n'.join(output_lines)
+
+    # Build output for removed items - CLEAN FORMAT BY DEFAULT
+    removed_lines = []
+    for item_name, discount, line in all_items:
+        normalized = normalize_name(item_name)
+        # Find which canonical name this belongs to
+        canonical_name = None
+        for existing_norm, existing_canonical in name_groups.items():
+            if normalized == existing_norm or quick_match(normalized, existing_norm):
+                canonical_name = existing_canonical
+                break
+
+        # Check if this line was kept or removed
+        if canonical_name in best_items:
+            kept_line = best_items[canonical_name][1]
+            if line != kept_line:
+                # Clean the removed line - remove extra spaces
+                cleaned = clean_removed_line(line)
+                removed_lines.append(cleaned)
+
+    removed_text = '\n'.join(removed_lines)
+
+    # Calculate statistics
+    original_count = len(all_items)
+    unique_count = len(best_items)
+    duplicates_removed = original_count - unique_count
+
+    # Find duplicate examples
+    sample_duplicates = []
+    item_dict = {}
+    for item_name, discount, line in all_items:
+        normalized = normalize_name(item_name)
+        # Find which canonical name this belongs to
+        canonical_name = None
+        for existing_norm, existing_canonical in name_groups.items():
+            if normalized == existing_norm or quick_match(normalized, existing_norm):
+                canonical_name = existing_canonical
+                break
+
+        if canonical_name not in item_dict:
+            item_dict[canonical_name] = []
+        item_dict[canonical_name].append((discount, line, item_name))
+
+    for canonical_name, entries in item_dict.items():
+        if len(entries) > 1:
+            kept_discount = best_items[canonical_name][0]
+            other_discounts = [d for d, l, n in entries if d != kept_discount]
+            # Get all variant names for this group
+            variant_names = list(set([n for d, l, n in entries]))
+            if len(sample_duplicates) < 15:
+                sample_duplicates.append({
+                    'name': canonical_name,
+                    'variants': variant_names,
+                    'kept': kept_discount,
+                    'removed': other_discounts
+                })
+
+    stats = {
+        'original_count': original_count,
+        'unique_count': unique_count,
+        'duplicates_removed': duplicates_removed,
+        'sample_duplicates': sample_duplicates
+    }
+
+    return output_text, removed_text, stats
+
+
+@app.route('/deduplicate-upload', methods=['POST'])
+def deduplicate_upload():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    if not file.filename.lower().endswith(('.txt', '.text', '.md')):
+        return jsonify({'error': 'Please upload a text file (.txt, .text, or .md)'}), 400
+
+    try:
+        try:
+            text_content = file.read().decode('utf-8')
+        except UnicodeDecodeError:
+            file.seek(0)
+            text_content = file.read().decode('latin-1')
+
+        deduplicated_text, removed_text, stats = deduplicate_items(text_content)
+
+        if not deduplicated_text.strip():
+            return jsonify({'error': 'No valid items found in file. Format should be: item_name----- discount%'}), 400
+
+        filename_base = os.path.splitext(secure_filename(file.filename))[0]
+        output_filename = f"{filename_base}_deduplicated.txt"
+        removed_filename = f"{filename_base}_removed.txt"
+
+        token = _store_result({
+            'text': deduplicated_text,
+            'filename': output_filename,
+            'stats': stats
+        })
+
+        removed_token = _store_result({
+            'text': removed_text,
+            'filename': removed_filename,
+            'stats': stats
+        })
+
+        return jsonify({
+            'success': True,
+            'filename': output_filename,
+            'download_token': token,
+            'removed_filename': removed_filename,
+            'removed_token': removed_token,
+            'deduplicated_text': deduplicated_text,
+            'removed_text': removed_text,
+            'stats': stats
+        })
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return jsonify({
+            'error': f'Error processing file: {str(e)}',
+            'details': error_details
+        }), 500
 
 # ============ MAKE HTML FILE FUNCTIONALITY ============
 
@@ -613,10 +913,6 @@ def generate_html_from_template(data_items, template_path, list_no="000001", lis
     content = re.sub(r'for \(let i = 1; i <= \d+; i\+\+\)', f'for (let i = 1; i <= {total_count}; i++)', content)
 
     return content, None
-
-@app.route('/make-html')
-def make_html_page():
-    return render_template('make_html.html')
 
 @app.route('/generate-html', methods=['POST'])
 def generate_html():

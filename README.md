@@ -54,3 +54,20 @@ The search algorithm includes:
 - Company/shop name extraction from file headers
 - Improved word-based matching to prevent incorrect number matches
 - Session-based file storage that appends (doesn't replace) files 
+
+## Other Features & Documentation
+
+The app also includes these pages:
+
+| Page | URL | Purpose |
+|------|-----|---------|
+| Home | `/` | Upload/process medicine lists |
+| Make HTML | `/make_html` | Generate HTML offer lists from processed data |
+| **Deduplicate** | `/deduplicate` | Remove duplicate list entries, keeping the highest discount |
+| Search | `/search` | Search medicines across uploaded lists |
+| Compare (Diff) | `/diff` | Compare two lists (added / deleted / changed) |
+
+Full documentation for the deduplication feature is available here:
+
+- **📄 [DEDUPLICATION.md](DEDUPLICATION.md)** — consolidated guide (overview, usage, fuzzy matching, exports, troubleshooting)
+

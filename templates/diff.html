@@ -35,32 +35,6 @@
 
         .container { max-width: 1400px; margin: 0 auto; }
 
-        .nav-header {
-            position: fixed; top: 0; left: 0; right: 0;
-            background: linear-gradient(135deg, rgba(26,26,46,0.95) 0%, rgba(22,33,62,0.95) 50%, rgba(15,52,96,0.95) 100%);
-            backdrop-filter: blur(10px);
-            z-index: 999;
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 0 20px; height: 60px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-        .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #667eea, #764ba2);
-            border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-        .logo-text { color: white; font-weight: 700; font-size: 1.2em; background: linear-gradient(135deg, #667eea, #f093fb);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .nav-links { display: flex; gap: 6px; }
-        .nav-link {
-            padding: 8px 14px; border-radius: 8px; text-decoration: none; color: rgba(255,255,255,0.8);
-            font-size: 13px; transition: all 0.2s; background: rgba(255,255,255,0.05);
-        }
-        .nav-link:hover { color: white; background: rgba(255,255,255,0.1); }
-        .nav-link.active { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
-        .theme-toggle {
-            width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1); color: white; cursor: pointer; font-size: 16px;
-        }
-
         .card { background: var(--bg-card); border-radius: 12px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border: 1px solid var(--border-color); }
         .header { text-align: center; margin-bottom: 16px; }
         .header h1 { font-size: 1.6em; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 4px; }
@@ -231,35 +205,10 @@
         .export-added { background: linear-gradient(135deg, #10b981, #059669); }
         .export-deleted { background: linear-gradient(135deg, #ef4444, #dc2626); }
         .export-changed { background: linear-gradient(135deg, #f59e0b, #d97706); }
-
-        .mobile-menu-btn { display: none; background: none; border: none; color: white; font-size: 20px; cursor: pointer; }
-        .mobile-nav { display: none; position: fixed; top: 60px; left: 0; right: 0; background: rgba(26,26,46,0.98); padding: 10px; z-index: 998; }
-        .mobile-nav.show { display: block; }
-        .mobile-nav .nav-link { display: block; padding: 12px; margin-bottom: 6px; background: rgba(255,255,255,0.05); border-radius: 8px; }
     </style>
 </head>
 <body>
-    <header class="nav-header">
-        <a href="/" class="nav-logo">
-            <div class="logo-icon">🔍</div>
-            <span class="logo-text">Diff Checker</span>
-        </a>
-        <nav class="nav-links">
-            <a href="/" class="nav-link" data-page="home">🏠 Home</a>
-            <a href="/make-html" class="nav-link" data-page="make-html">✨ Make HTML</a>
-            <a href="/search" class="nav-link" data-page="search">🔍 Search</a>
-            <a href="/diff" class="nav-link active" data-page="diff">📊 Compare</a>
-        </nav>
-        <div style="display:flex;gap:8px;align-items:center">
-            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
-            <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()">☰</button>
-        </div>
-    </header>
-    <nav class="mobile-nav" id="mobileNav">
-        <a href="/" class="nav-link" onclick="toggleMobileMenu()">🏠 Home</a>
-        <a href="/make-html" class="nav-link" onclick="toggleMobileMenu()">✨ Make HTML</a>
-        <a href="/search" class="nav-link" onclick="toggleMobileMenu()">🔍 Search</a>
-    </nav>
+    {% include 'navbar_component.html' %}
 
     <div class="container">
         <div class="header">
@@ -403,22 +352,6 @@
         let newData = { items: [], hasData: false };
         let lastComparison = { added: [], deleted: [], changed: [] };
 
-        function toggleTheme() {
-            const body = document.body;
-            const toggle = document.getElementById('themeToggle');
-            if (body.getAttribute('data-theme') === 'dark') {
-                body.removeAttribute('data-theme');
-                toggle.textContent = '🌙';
-            } else {
-                body.setAttribute('data-theme', 'dark');
-                toggle.textContent = '☀️';
-            }
-        }
-
-        function toggleMobileMenu() {
-            document.getElementById('mobileNav').classList.toggle('show');
-        }
-
         function loadFile(input, type) {
             const file = input.files[0];
             if (!file) return;
@@ -449,43 +382,85 @@
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
 
-            // Strategy 1: New format with item-row and cell-name class
+            // Strategy 1: NEW format <tr class="item-row"> with data-* attributes.
+            // Rows: data-code, data-name (may be absent), data-disc, data-tp,
+            //       data-bonus, data-tax and a <td class="cell-name">.
             let rows = doc.querySelectorAll('tr.item-row');
             if (rows.length > 0) {
                 rows.forEach(row => {
-                    const nameCell = row.querySelector('.cell-name');
-                    if (!nameCell) return;
-                    const name = nameCell.textContent.trim();
+                    const nameEl = row.querySelector('.cell-name');
+                    const name = (row.getAttribute('data-name') ||
+                                  (nameEl ? nameEl.textContent.trim() : '')).trim();
                     if (!name) return;
-                    const disc = row.getAttribute('data-disc') || '';
-                    const code = row.getAttribute('data-id') || '';
-                    const tp = row.getAttribute('data-tp') || '';
-                    items.push({ name, code, disc, tp });
+                    const code  = row.getAttribute('data-code') || row.getAttribute('data-id') || '';
+                    const disc  = row.getAttribute('data-disc') || '';
+                    const tp    = row.getAttribute('data-tp') || '';
+                    const bonus = row.getAttribute('data-bonus') || '';
+                    const tax   = row.getAttribute('data-tax') || '';
+                    items.push({ name, code, disc, tp, bonus, tax });
                 });
                 return items;
             }
 
-            // Strategy 2: Stock format with tr.item (SR#, Code, Name, Disc%, TP, Qty...)
+            // Strategy 2: OLD / stock format <tr class="item">.
+            // Actual column layout observed: [Code, Name, QtyInput, Disc%, (blank), Price]
+            //   td0=Code, td1=Name, td2=Qty(<input>, empty text), td3=Disc%, td4=blank, td5=Price.
+            // Disc is identified by '%'; Name is the text cell just before it that
+            // contains letters; Price is the numeric cell that follows the disc cell.
             rows = doc.querySelectorAll('tr.item');
             if (rows.length > 0) {
                 rows.forEach(row => {
-                    const tds = row.querySelectorAll('td');
+                    const tds = Array.from(row.querySelectorAll('td'));
                     if (tds.length < 4) return;
 
-                    // Format: [SR#, Code, ItemName, Disc%, TP, Qty, Bonus, NetPrice, Total]
-                    const code = tds[1] ? tds[1].textContent.trim() : '';
-                    const name = tds[2] ? tds[2].textContent.trim() : '';
-                    const disc = tds[3] ? tds[3].textContent.trim().replace('%', '') : '';
-                    const tp = tds[4] ? tds[4].textContent.trim() : '';
+                    const texts = tds.map(td => td.textContent.replace(/\s+/g, ' ').trim());
 
-                    if (name && name.length > 2) {
-                        items.push({ name, code, disc, tp });
+                    // Find the discount cell (the one containing '%').
+                    let discIdx = -1, disc = '';
+                    for (let i = 0; i < texts.length; i++) {
+                        if (texts[i].indexOf('%') !== -1) {
+                            discIdx = i;
+                            disc = texts[i].replace(/[^0-9.]/g, ''); // strip %, spaces, marks
+                            break;
+                        }
                     }
+                    if (discIdx < 0) return; // not an item row we understand
+
+                    // Code = first non-empty cell (td0). Name = the non-empty,
+                    // letter-bearing cell immediately before disc (skipping empty qty).
+                    const leftCells = [];
+                    for (let i = 0; i < discIdx; i++) {
+                        if (texts[i]) leftCells.push(i);
+                    }
+                    let code = '', name = '';
+                    if (leftCells.length) code = texts[leftCells[0]];
+                    // Name = last non-empty, letter-bearing cell before the disc cell,
+                    // skipping the code column (index 0).
+                    for (let k = leftCells.length - 1; k >= 1; k--) {
+                        const i = leftCells[k];
+                        if (/[A-Za-z]/.test(texts[i]) && texts[i].length >= 2) {
+                            name = texts[i];
+                            break;
+                        }
+                    }
+                    if (!name && /[A-Za-z]/.test(code) && code.length > 3) {
+                        name = code; code = ''; // only one text column present → treat as name
+                    }
+                    if (!name) return;
+
+                    // Price = first numeric cell that follows the disc cell.
+                    let tp = '';
+                    for (let i = discIdx + 1; i < texts.length; i++) {
+                        const t = texts[i];
+                        if (t && !isNaN(parseFloat(t.replace(/,/g, '')))) { tp = t.replace(/,/g, ''); break; }
+                    }
+
+                    items.push({ name, code, disc, tp, bonus: '', tax: '' });
                 });
                 if (items.length > 0) return items;
             }
 
-            // Strategy 3: Generic tbody tr format
+            // Strategy 3: Generic tbody tr format (last resort).
             rows = doc.querySelectorAll('tbody tr');
             let genericItems = [];
 
@@ -496,10 +471,10 @@
                 let code = '', name = '', disc = '', tp = '';
 
                 if (tds.length >= 3) {
-                    const col0 = tds[0].textContent.trim();
-                    const col1 = tds[1].textContent.trim();
-                    const col2 = tds[2].textContent.trim();
-                    const col3 = tds.length > 3 ? tds[3].textContent.trim() : '';
+                    const col0 = tds[0].textContent.replace(/\s+/g, ' ').trim();
+                    const col1 = tds[1].textContent.replace(/\s+/g, ' ').trim();
+                    const col2 = tds[2].textContent.replace(/\s+/g, ' ').trim();
+                    const col3 = tds.length > 3 ? tds[3].textContent.replace(/\s+/g, ' ').trim() : '';
 
                     if (/^\d+$/.test(col0) && col0.length <= 3) {
                         code = col1;
@@ -512,7 +487,7 @@
                     }
 
                     if (name && name.length > 3 && !(/^\d+$/.test(name))) {
-                        genericItems.push({ name, code, disc: disc.replace('%', ''), tp });
+                        genericItems.push({ name, code, disc: disc.replace(/[^0-9.]/g, ''), tp });
                     }
                 }
             });
@@ -633,16 +608,20 @@
                 items.forEach(item => {
                     const disc = item.newDisc || '0.00';
                     const tp = item.tp || '';
+                    const bonus = item.bonus || '';
+                    const tax = item.tax || '0.00';
                     const spaces = Math.max(0, 35 - item.name.length - disc.length);
-                    const line = `${item.name}----- ${disc}%${' '.repeat(spaces)} | ${tp} |  | 0.00`;
+                    const line = `${item.name}----- ${disc}%${' '.repeat(spaces)} | ${tp} | ${bonus} | ${tax}`;
                     content += line + '\n';
                 });
             } else {
                 items.forEach(item => {
                     const disc = item.disc || '0.00';
                     const tp = item.tp || '';
+                    const bonus = item.bonus || '';
+                    const tax = item.tax || '0.00';
                     const spaces = Math.max(0, 35 - item.name.length - disc.length);
-                    const line = `${item.name}----- ${disc}%${' '.repeat(spaces)} | ${tp} |  | 0.00`;
+                    const line = `${item.name}----- ${disc}%${' '.repeat(spaces)} | ${tp} | ${bonus} | ${tax}`;
                     content += line + '\n';
                 });
             }
@@ -666,15 +645,6 @@
             div.textContent = text;
             return div.innerHTML;
         }
-
-        (function() {
-            const currentPage = window.location.pathname;
-            document.querySelectorAll('.nav-link').forEach(link => {
-                if (link.getAttribute('href') === currentPage) {
-                    link.classList.add('active');
-                }
-            });
-        })();
     </script>
 </body>
 </html>
