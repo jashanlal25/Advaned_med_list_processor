@@ -725,8 +725,11 @@
                     const isHtml = /\.(htm|html)$/i.test(rec.filename);
                     if (isHtml) {
                         const parsed = parseHtmlFile(content);
+                        // Import MEDICINE/LIST DATA only. The imported file's
+                        // title/branding must NEVER overwrite the user's saved
+                        // profile (title, whatsapp, etc.) — those stay in
+                        // localStorage until manually changed.
                         editorTextarea.value = parsed.lines;
-                        if (parsed.title) titleInput.value = parsed.title;
                         if (parsed.listNo) document.getElementById('list_no').value = parsed.listNo;
                     } else {
                         editorTextarea.value = content;
@@ -830,8 +833,11 @@
                 const content = e.target.result;
                 if (isHtml) {
                     const parsed = parseHtmlFile(content);
+                    // Import MEDICINE/LIST DATA only. The imported file's
+                    // title/branding must NEVER overwrite the user's saved
+                    // profile (title, whatsapp, etc.) — those stay in
+                    // localStorage until manually changed.
                     editorTextarea.value = parsed.lines;
-                    if (parsed.title) titleInput.value = parsed.title;
                     if (parsed.listNo) document.getElementById('list_no').value = parsed.listNo;
                 } else {
                     editorTextarea.value = content;

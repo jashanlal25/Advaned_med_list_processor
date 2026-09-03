@@ -13,7 +13,8 @@
     const DB_VERSION = 1;
     const FILES_STORE = 'files';
     const META_STORE = 'meta';
-    const INDEX_BATCH_KEY = 'index_batch';   // array of record ids, max 3
+    const INDEX_BATCH_KEY = 'index_batch';   // array of record ids, max INDEX_BATCH_LIMIT
+    const INDEX_BATCH_LIMIT = 6;             // Index/Home persistent batch capacity
     const TTL_MS = 24 * 60 * 60 * 1000;      // 24h cleanup for orphans
 
     let _dbPromise = null;
@@ -66,7 +67,7 @@
     }
 
     /** Save a new file record; returns the record (with id). */
-    function putFile(filename, type, ext, blob, source) {
+    function putFile(filename, type, ext, blob, source, lastModified) {
         const record = {
             id: newId(),
             filename: filename,
@@ -75,6 +76,7 @@
             size: blob.size,
             blob: blob,
             source: source || 'shared',
+            lastModified: lastModified || 0,
             created: Date.now()
         };
         return tx(FILES_STORE, 'readwrite', function (store) {
@@ -94,23 +96,34 @@
         });
     }
 
-    /** Remove old orphan records not referenced by any batch (TTL). */
+    /** Remove old orphan records not referenced by any batch/state (TTL). */
     function cleanupOrphans() {
         return Promise.all([
             getIndexBatchIds(),
-            tx(FILES_STORE, 'readonly', function (store) {
-                const r = store.getAll();
-                r.onsuccess = function () {
-                    const now = Date.now();
-                    r.result.forEach(function (rec) {
-                        if (now - rec.created > TTL_MS) {
-                            store.delete(rec.id);
-                        }
-                    });
-                };
-                return { __req: r };
-            })
-        ]).then(function () { return true; });
+            getDiffState()
+        ]).then(function (refs) {
+            const keep = {};
+            (refs[0] || []).forEach(function (id) { keep[id] = true; });
+            if (refs[1] && refs[1].oldFileId) keep[refs[1].oldFileId] = true;
+            if (refs[1] && refs[1].newFileId) keep[refs[1].newFileId] = true;
+            return openDB().then(function (db) {
+                return new Promise(function (resolve) {
+                    const t = db.transaction(FILES_STORE, 'readwrite');
+                    const store = t.objectStore(FILES_STORE);
+                    const r = store.getAll();
+                    r.onsuccess = function () {
+                        const now = Date.now();
+                        r.result.forEach(function (rec) {
+                            if (!keep[rec.id] && now - rec.created > TTL_MS) {
+                                store.delete(rec.id);
+                            }
+                        });
+                    };
+                    t.oncomplete = function () { resolve(true); };
+                    t.onerror = function () { resolve(true); };
+                });
+            });
+        });
     }
 
     // ---------- index 3-file batch ----------
@@ -136,7 +149,7 @@
     /** Append a file id to the Index batch. Rejects if batch already has 3. */
     function appendToIndexBatch(id) {
         return getIndexBatchIds().then(function (ids) {
-            if (ids.length >= 3) {
+            if (ids.length >= INDEX_BATCH_LIMIT) {
                 return { ok: false, reason: 'full', ids: ids };
             }
             if (ids.indexOf(id) === -1) ids.push(id);
@@ -172,6 +185,37 @@
                 return setMeta(INDEX_BATCH_KEY, []);
             });
         });
+    }
+
+    // ---------- diff two-slot state ----------
+    // { oldFileId: <record id|null>, newFileId: <record id|null> }
+    const DIFF_STATE_KEY = 'diff_state';
+
+    function getDiffState() {
+        return getMeta(DIFF_STATE_KEY).then(function (v) {
+            return (v && typeof v === 'object') ? v : { oldFileId: null, newFileId: null };
+        });
+    }
+
+    function setDiffState(state) {
+        return setMeta(DIFF_STATE_KEY, {
+            oldFileId: state.oldFileId || null,
+            newFileId: state.newFileId || null
+        });
+    }
+
+    function clearDiffState() {
+        return setDiffState({ oldFileId: null, newFileId: null });
+    }
+
+    // ---------- destination-scoped clearing ----------
+    // Choosing a destination clears ONLY the other destinations' working
+    // state — never the chosen destination's own state.
+    function clearOtherDestinationStates(chosen) {
+        const jobs = [];
+        if (chosen !== 'index') jobs.push(clearIndexBatch());
+        if (chosen !== 'diff') jobs.push(clearDiffState());
+        return Promise.all(jobs);
     }
 
     // ---------- conversion helpers ----------
@@ -212,9 +256,13 @@
         getIndexBatchIds: getIndexBatchIds,
         removeFromIndexBatch: removeFromIndexBatch,
         clearIndexBatch: clearIndexBatch,
+        getDiffState: getDiffState,
+        setDiffState: setDiffState,
+        clearDiffState: clearDiffState,
+        clearOtherDestinationStates: clearOtherDestinationStates,
         recordToFile: recordToFile,
         base64ToBlob: base64ToBlob,
         fmtSize: fmtSize,
-        MAX_BATCH: 3
+        MAX_BATCH: INDEX_BATCH_LIMIT
     };
 })(window);

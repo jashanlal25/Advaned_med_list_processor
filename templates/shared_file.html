@@ -242,23 +242,45 @@
                 showStatus('Preparing…');
                 commitToIndexedDB().then(function (id) {
                     if (kind === 'index') {
-                        return SharedStore.appendToIndexBatch(id).then(function (res) {
-                            if (!res.ok) {
-                                // Batch full — discard ONLY the new file, keep A+B+C.
-                                return SharedStore.deleteFile(id).then(function () {
-                                    showStatus('You already have 3 files in this batch. ' +
-                                               'Remove one before adding another.');
-                                });
-                            }
-                            window.location.href = '/';
+                        // Index: clear OTHER destinations' state (diff), keep Index batch.
+                        return SharedStore.clearOtherDestinationStates('index').then(function () {
+                            return SharedStore.appendToIndexBatch(id).then(function (res) {
+                                if (!res.ok) {
+                                    // Batch full — discard ONLY the new file, keep A+B+C.
+                                    return SharedStore.deleteFile(id).then(function () {
+                                        showStatus('You already have 6 files in this batch. ' +
+                                                   'Remove one before adding another.');
+                                    });
+                                }
+                                window.location.href = '/';
+                            });
                         });
                     }
-                    // Any other destination: clear the Index batch first (rule §11).
-                    return SharedStore.clearIndexBatch().then(function () {
-                        const map = {
+                    if (kind === 'diff') {
+                        // Diff has two slots: Old (filled first) and New (filled second).
+                        // Third file: show Replace Old / Replace New / Cancel.
+                        return SharedStore.clearOtherDestinationStates('diff').then(function () {
+                            return SharedStore.getDiffState().then(function (state) {
+                                if (!state.oldFileId) {
+                                    // Old empty → fill Old.
+                                    return SharedStore.setDiffState({ oldFileId: id, newFileId: null })
+                                        .then(function () { window.location.href = '/diff'; });
+                                }
+                                if (!state.newFileId) {
+                                    // Old exists, New empty → fill New.
+                                    return SharedStore.setDiffState({ oldFileId: state.oldFileId, newFileId: id })
+                                        .then(function () { window.location.href = '/diff'; });
+                                }
+                                // Both slots full → show Replace Old / Replace New / Cancel.
+                                showReplaceChooser(id, state);
+                            });
+                        });
+                    }
+                    // Other destinations: clear other states, then route.
+                    return SharedStore.clearOtherDestinationStates(kind).then(function () {
+                        var map = {
                             search: '/search?sharedid=' + encodeURIComponent(id),
                             dedup: '/deduplicate?sharedid=' + encodeURIComponent(id),
-                            diff: '/diff?sharedid=' + encodeURIComponent(id),
                             genhtml: '/make_html?sharedid=' + encodeURIComponent(id)
                         };
                         window.location.href = map[kind];
@@ -267,6 +289,62 @@
                     console.warn('share destination failed:', err);
                     showStatus('Something went wrong storing the file. Please try again.');
                 });
+            }
+
+            function showReplaceChooser(incomingId, state) {
+                // Fetch filenames for Old/New to display.
+                Promise.all([SharedStore.getFile(state.oldFileId), SharedStore.getFile(state.newFileId)])
+                    .then(function (recs) {
+                        var oldName = recs[0] ? recs[0].filename : 'Old file';
+                        var newName = recs[1] ? recs[1].filename : 'New file';
+                        status.innerHTML =
+                            '<div style="text-align:left; margin-bottom:12px;">' +
+                            '<strong>Both Diff files are already selected.</strong><br>' +
+                            '<div style="margin-top:8px; padding:8px; background:#f0f4ff; border-radius:8px;">' +
+                            '<strong>OLD:</strong> ' + escapeHtml(oldName) + '</div>' +
+                            '<div style="margin-top:4px; padding:8px; background:#fff7ed; border-radius:8px;">' +
+                            '<strong>NEW:</strong> ' + escapeHtml(newName) + '</div>' +
+                            '</div>' +
+                            '<div style="font-size:0.95em; margin-bottom:8px;">Where should the new file go?</div>';
+                        status.style.display = 'block';
+
+                        // Create buttons: Replace Old, Replace New, Cancel.
+                        var btnOld = document.createElement('button');
+                        btnOld.className = 'dest-btn dest-diff';
+                        btnOld.textContent = 'Replace Old';
+                        btnOld.style.marginBottom = '8px';
+                        btnOld.onclick = function () {
+                            SharedStore.deleteFile(state.oldFileId).then(function () {
+                                return SharedStore.setDiffState({ oldFileId: incomingId, newFileId: state.newFileId });
+                            }).then(function () { window.location.href = '/diff'; });
+                        };
+
+                        var btnNew = document.createElement('button');
+                        btnNew.className = 'dest-btn dest-diff';
+                        btnNew.textContent = 'Replace New';
+                        btnNew.style.marginBottom = '8px';
+                        btnNew.onclick = function () {
+                            SharedStore.deleteFile(state.newFileId).then(function () {
+                                return SharedStore.setDiffState({ oldFileId: state.oldFileId, newFileId: incomingId });
+                            }).then(function () { window.location.href = '/diff'; });
+                        };
+
+                        var btnCancel = document.createElement('button');
+                        btnCancel.className = 'cancel-btn';
+                        btnCancel.textContent = 'Cancel';
+                        btnCancel.onclick = function () {
+                            SharedStore.deleteFile(incomingId).then(function () { window.location.href = '/diff'; });
+                        };
+
+                        status.appendChild(document.createElement('br'));
+                        status.appendChild(btnOld);
+                        status.appendChild(btnNew);
+                        status.appendChild(btnCancel);
+                    });
+            }
+
+            function escapeHtml(s) {
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             }
 
             document.getElementById('destUpload').addEventListener('click', function () { destination('index'); });

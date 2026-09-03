@@ -1027,7 +1027,7 @@
         <div style="text-align: center; margin-bottom: 20px;">
             <a href="/make_html" style="display: inline-block; padding: 10px 20px; background: linear-gradient(135deg, #198754, #146c43); color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Make HTML File &rarr;</a>
         </div>
-        <div class="file-counter" id="fileCounter">Files processed: 0 / 3</div>
+        <div class="file-counter" id="fileCounter">Files processed: 0 / 6</div>
 
         <!-- Results will be added here dynamically -->
         <div id="resultsContainer"></div>
@@ -1038,7 +1038,7 @@
                 <!-- Persistent 3-file batch (survives WhatsApp share round-trips) -->
                 <div id="indexBatchPanel" style="display:none; margin-bottom:16px; padding:14px 16px; border:1px solid var(--border-color); border-radius:12px; background:var(--input-bg);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-                        <strong style="color:var(--text-primary);">Files ready (<span id="batchCount">0</span>/3)</strong>
+                        <strong style="color:var(--text-primary);">Files ready (<span id="batchCount">0</span>/6)</strong>
                         <button type="button" onclick="clearIndexBatchUI()" style="padding:6px 12px; background:#ef4444; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer;">Clear All</button>
                     </div>
                     <div id="batchItems"></div>
@@ -1132,7 +1132,7 @@
     <script>
 
         let fileCount = 0;
-        const maxFiles = 3;
+        const maxFiles = 6;
         let selectedFile = null;
         let isTextFile = false;
 
@@ -1202,7 +1202,9 @@
             SharedStore.getFile(id).then(function (rec) {
                 if (!rec) return;
                 // Build a real File object — allowed; we never touch <input>.
-                handleFile(SharedStore.recordToFile(rec));
+                // Process means "process this EXISTING batch file": it must NOT
+                // be re-persisted into IndexedDB or re-added to the batch.
+                handleFile(SharedStore.recordToFile(rec), { persistToBatch: false });
             });
         }
 
@@ -1279,7 +1281,41 @@
         });
 
         // Handle file selection
-        async function handleFile(file) {
+        // ADD a new file to the persistent batch. Only used for genuinely NEW
+        // files (manual selection / WhatsApp adoption via the chooser) — never
+        // for re-processing an existing batch record.
+        async function addFileToIndexBatch(file) {
+            if (!window.SharedStore) return;
+            // Duplicate guard: identity = filename + size + lastModified.
+            // Filename alone is NOT used — two different documents may share
+            // a name legitimately.
+            const fileKey = file.name + '|' + file.size + '|' + (file.lastModified || 0);
+            const existing = await SharedStore.getIndexBatch();
+            const duplicate = existing.some(function (rec) {
+                return (rec.filename + '|' + rec.size + '|' + (rec.lastModified || 0)) === fileKey;
+            });
+            if (duplicate) {
+                refreshBatch();
+                return;
+            }
+
+            const ext = (file.name.match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+            const rec = await SharedStore.putFile(file.name, file.type, ext, file, 'manual', file.lastModified || 0);
+            const res = await SharedStore.appendToIndexBatch(rec.id);
+            if (!res.ok) {
+                errorMessage.textContent = 'Maximum 6 files in this batch. Remove one before adding another.';
+                errorMessage.classList.add('show');
+                SharedStore.deleteFile(rec.id);
+            } else {
+                refreshBatch();
+            }
+        }
+
+        // Handle file selection. opts.persistToBatch (default true) is false
+        // when an EXISTING batch record is being processed, so Process never
+        // duplicates the record.
+        async function handleFile(file, opts) {
+            const persistToBatch = !opts || opts.persistToBatch !== false;
             errorMessage.classList.remove('show');
             selectedFile = file;
             isTextFile = file.name.toLowerCase().endsWith('.txt');
@@ -1287,20 +1323,9 @@
             fileName.textContent = `Selected: ${file.name}`;
             fileName.style.display = 'inline-block';
 
-            // Manual files join the SAME persistent IndexedDB batch as
-            // WhatsApp-shared files (subject to the 3-file cap).
-            if (window.SharedStore) {
+            if (persistToBatch) {
                 try {
-                    const ext = (file.name.match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
-                    const rec = await SharedStore.putFile(file.name, file.type, ext, file, 'manual');
-                    const res = await SharedStore.appendToIndexBatch(rec.id);
-                    if (!res.ok) {
-                        errorMessage.textContent = 'Maximum 3 files in this batch. Remove one before adding another.';
-                        errorMessage.classList.add('show');
-                        SharedStore.deleteFile(rec.id);
-                    } else {
-                        refreshBatch();
-                    }
+                    await addFileToIndexBatch(file);
                 } catch (e) { /* IndexedDB unavailable — manual flow still works */ }
             }
 
@@ -1756,8 +1781,8 @@
                 uploadSection.classList.remove('show');
                 const maxMsg = document.createElement('div');
                 maxMsg.className = 'max-reached';
-                maxMsg.innerHTML = '⚠️ Maximum 3 files reached. Refresh page to start over.';
-                resultsContainer.insertAdjacentHTML('beforeend', '<div class="max-reached">⚠️ Maximum 3 files reached. Refresh page to start over.</div>');
+                maxMsg.innerHTML = '⚠️ Maximum 6 files reached. Refresh page to start over.';
+                resultsContainer.insertAdjacentHTML('beforeend', '<div class="max-reached">⚠️ Maximum 6 files reached. Refresh page to start over.</div>');
             }
         }
 
@@ -2420,8 +2445,8 @@
                                 document.getElementById('uploadSection').classList.remove('show');
                                 const maxMsg = document.createElement('div');
                                 maxMsg.className = 'max-reached';
-                                maxMsg.innerHTML = '⚠️ Maximum 3 files reached. Refresh page to start over.';
-                                document.getElementById('resultsContainer').insertAdjacentHTML('beforeend', '<div class="max-reached">⚠️ Maximum 3 files reached. Refresh page to start over.</div>');
+                                maxMsg.innerHTML = '⚠️ Maximum 6 files reached. Refresh page to start over.';
+                                document.getElementById('resultsContainer').insertAdjacentHTML('beforeend', '<div class="max-reached">⚠️ Maximum 6 files reached. Refresh page to start over.</div>');
                             }
                         }
                     } else {
