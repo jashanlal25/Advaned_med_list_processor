@@ -1035,6 +1035,14 @@
         <!-- Upload Section -->
         <div class="upload-section show" id="uploadSection">
             <div class="card">
+                <!-- Persistent 3-file batch (survives WhatsApp share round-trips) -->
+                <div id="indexBatchPanel" style="display:none; margin-bottom:16px; padding:14px 16px; border:1px solid var(--border-color); border-radius:12px; background:var(--input-bg);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                        <strong style="color:var(--text-primary);">Files ready (<span id="batchCount">0</span>/3)</strong>
+                        <button type="button" onclick="clearIndexBatchUI()" style="padding:6px 12px; background:#ef4444; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer;">Clear All</button>
+                    </div>
+                    <div id="batchItems"></div>
+                </div>
                 <input type="file" id="fileInput" accept=".htm,.html,.txt" style="display: none;">
                 <div class="upload-area" id="uploadArea">
                     <div class="upload-icon">📄</div>
@@ -1120,6 +1128,7 @@
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='shared-store.js') }}"></script>
     <script>
 
         let fileCount = 0;
@@ -1144,6 +1153,72 @@
         const processBtn = document.getElementById('processBtn');
         const fileCounter = document.getElementById('fileCounter');
         const pasteArea = document.getElementById('pasteArea');
+
+        // ---------------- Persistent 3-file Index batch (IndexedDB) ----------------
+        // Manual and WhatsApp-shared files live in ONE batch, max 3, persisted
+        // on-device so it survives closing the app and sharing more files.
+        const batchPanel = document.getElementById('indexBatchPanel');
+        const batchItems = document.getElementById('batchItems');
+        const batchCount = document.getElementById('batchCount');
+
+        function renderBatch(records) {
+            batchItems.innerHTML = '';
+            records.forEach(function (rec) {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border-color); flex-wrap:wrap;';
+                const icon = document.createElement('span');
+                icon.textContent = rec.source === 'shared' ? '📱' : '📄';
+                const name = document.createElement('span');
+                name.textContent = rec.filename;
+                name.style.cssText = 'flex:1; min-width:0; overflow-wrap:anywhere; color:var(--text-primary); font-size:0.92em;';
+                const size = document.createElement('span');
+                size.textContent = SharedStore.fmtSize(rec.size);
+                size.style.cssText = 'color:var(--text-secondary); font-size:0.8em; white-space:nowrap;';
+                const proc = document.createElement('button');
+                proc.type = 'button';
+                proc.textContent = 'Process';
+                proc.style.cssText = 'padding:6px 14px; background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; min-height:32px;';
+                proc.onclick = function () { processBatchFile(rec.id); };
+                const rem = document.createElement('button');
+                rem.type = 'button';
+                rem.textContent = '✕';
+                rem.title = 'Remove file';
+                rem.style.cssText = 'padding:6px 10px; background:#ef4444; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer; min-height:32px;';
+                rem.onclick = function () { removeBatchFile(rec.id); };
+                row.appendChild(icon); row.appendChild(name); row.appendChild(size);
+                row.appendChild(proc); row.appendChild(rem);
+                batchItems.appendChild(row);
+            });
+            batchCount.textContent = records.length;
+            batchPanel.style.display = records.length ? 'block' : 'none';
+        }
+
+        function refreshBatch() {
+            SharedStore.getIndexBatch().then(renderBatch).catch(function () {});
+        }
+
+        function processBatchFile(id) {
+            errorMessage.classList.remove('show');
+            SharedStore.getFile(id).then(function (rec) {
+                if (!rec) return;
+                // Build a real File object — allowed; we never touch <input>.
+                handleFile(SharedStore.recordToFile(rec));
+            });
+        }
+
+        function removeBatchFile(id) {
+            SharedStore.removeFromIndexBatch(id).then(refreshBatch).catch(function () {});
+        }
+
+        function clearIndexBatchUI() {
+            SharedStore.clearIndexBatch().then(refreshBatch).catch(function () {});
+        }
+
+        // Restore batch on every page load (survives PWA close / WhatsApp trips)
+        if (window.SharedStore) {
+            SharedStore.cleanupOrphans().then(refreshBatch).catch(function () {});
+        }
+
 
         // Show settings panel and row count when text is pasted
         pasteArea.addEventListener('input', function() {
@@ -1211,6 +1286,23 @@
 
             fileName.textContent = `Selected: ${file.name}`;
             fileName.style.display = 'inline-block';
+
+            // Manual files join the SAME persistent IndexedDB batch as
+            // WhatsApp-shared files (subject to the 3-file cap).
+            if (window.SharedStore) {
+                try {
+                    const ext = (file.name.match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+                    const rec = await SharedStore.putFile(file.name, file.type, ext, file, 'manual');
+                    const res = await SharedStore.appendToIndexBatch(rec.id);
+                    if (!res.ok) {
+                        errorMessage.textContent = 'Maximum 3 files in this batch. Remove one before adding another.';
+                        errorMessage.classList.add('show');
+                        SharedStore.deleteFile(rec.id);
+                    } else {
+                        refreshBatch();
+                    }
+                } catch (e) { /* IndexedDB unavailable — manual flow still works */ }
+            }
 
             // Detect ending marks in the file
             if (isTextFile) {

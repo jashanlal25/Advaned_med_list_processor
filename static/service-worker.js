@@ -7,7 +7,7 @@
  *  - Never intercept POST requests (uploads, searches, generation, etc.).
  *  - Never cache private / user-specific data.
  */
-const CACHE_NAME = 'medlist-shell-v2';
+const CACHE_NAME = 'medlist-shell-v3';
 
 const SHELL_ASSETS = [
   '/static/manifest.json',
@@ -32,7 +32,7 @@ const NETWORK_ONLY_PREFIXES = [
   '/preview-html',
   '/share',
   '/share-target',
-  '/shared-files',
+  '/shared-file',
   '/search',
   '/diff'
 ];

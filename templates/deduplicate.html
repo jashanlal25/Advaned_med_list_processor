@@ -391,6 +391,12 @@
         <div class="error-message" id="errorMessage"></div>
         <div class="loading" id="loading"><div class="spinner"></div><p>Processing...</p></div>
 
+        <div id="sharedFileBanner" style="display:none; margin-bottom:15px; padding:12px 16px; border-radius:12px; background:#eef2ff; border:1px solid #c7d2fe; color:#3730a3;">
+            <strong>📱 Received from another app</strong>
+            <div id="sharedFileName" style="margin-top:4px; overflow-wrap:anywhere; font-size:0.9em;"></div>
+            <div style="font-size:0.8em; margin-top:4px; opacity:0.8;">Loaded below — press “Run Deduplication”.</div>
+        </div>
+
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('paste')">📝 Paste Text</button>
             <button class="tab-btn" onclick="switchTab('upload')">📁 Upload File</button>
@@ -486,12 +492,38 @@
     </div>
 </div>
 
+<script src="{{ url_for('static', filename='shared-store.js') }}"></script>
 <script>
     let currentData = null;
     let currentToken = null;
     let isResizing = false;
     let originalLeftContent = '';
     let originalRightContent = '';
+
+    // ---- Shared-file adoption (Stage 2, IndexedDB) ----
+    // Chooser sent ?sharedid=<record id>. Load the shared TXT into the paste
+    // textarea — the same input the manual workflow uses.
+    (function adoptSharedFile(){
+        const params = new URLSearchParams(window.location.search);
+        const sharedId = params.get('sharedid');
+        if(!sharedId || !window.SharedStore) return;
+
+        SharedStore.getFile(sharedId).then(function(rec){
+            if(!rec) return;
+            return rec.blob.text().then(function(text){
+                document.getElementById('pasteTextarea').value = text;
+                updateRowCount();
+                const banner = document.getElementById('sharedFileBanner');
+                document.getElementById('sharedFileName').textContent =
+                    rec.filename + ' · ' + SharedStore.fmtSize(rec.size);
+                banner.style.display = 'block';
+            });
+        }).then(function(){
+            SharedStore.deleteFile(sharedId).catch(function(){});
+        }).catch(function(){});
+
+        window.history.replaceState({}, document.title, window.location.pathname);
+    })();
 
     function startDrag(e) {
         isResizing = true;

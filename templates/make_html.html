@@ -700,6 +700,7 @@
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='shared-store.js') }}"></script>
     <script>
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
@@ -709,6 +710,36 @@
         const generateBtn = document.getElementById('generateBtn');
         const loading = document.getElementById('loading');
         const result = document.getElementById('result');
+
+        // ---- Shared-file adoption (Stage 2, IndexedDB) ----
+        // Chooser sent ?sharedid=<record id>. Feed the shared TXT/HTML through
+        // the same reader path that handleFile() uses for manual uploads.
+        (function adoptSharedFile(){
+            const params = new URLSearchParams(window.location.search);
+            const sharedId = params.get('sharedid');
+            if(!sharedId || !window.SharedStore) return;
+
+            SharedStore.getFile(sharedId).then(function(rec){
+                if(!rec) return;
+                return rec.blob.text().then(function(content){
+                    const isHtml = /\.(htm|html)$/i.test(rec.filename);
+                    if (isHtml) {
+                        const parsed = parseHtmlFile(content);
+                        editorTextarea.value = parsed.lines;
+                        if (parsed.title) titleInput.value = parsed.title;
+                        if (parsed.listNo) document.getElementById('list_no').value = parsed.listNo;
+                    } else {
+                        editorTextarea.value = content;
+                    }
+                    showEditor();
+                    updateItemCount();
+                });
+            }).then(function(){
+                SharedStore.deleteFile(sharedId).catch(function(){});
+            }).catch(function(){});
+
+            window.history.replaceState({}, document.title, window.location.pathname);
+        })();
         const resultCard = document.getElementById('resultCard');
         const resultMessage = document.getElementById('resultMessage');
         const itemCount = document.getElementById('itemCount');

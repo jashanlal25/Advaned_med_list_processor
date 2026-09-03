@@ -638,6 +638,7 @@ Imidol tab (1)" rows="10"></textarea>
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='shared-store.js') }}"></script>
     <script>
         let uploadedFiles = [];
         const SESSION_MAX_AGE = 4 * 60 * 60 * 1000; // 4 hours in ms
@@ -669,53 +670,64 @@ Imidol tab (1)" rows="10"></textarea>
             } catch(e){}
         })();
 
-        // ---- Web Share Target handoff (Stage 2) ----
-        // /share-target stored the shared file(s) server-side under a session
-        // and redirected here with ?shared=<session_id>. Adopt that session so
-        // the shared file flows into the exact same search workflow as a
-        // manual upload.
-        (function adoptSharedSession(){
+        // ---- Shared-file adoption (Stage 2, IndexedDB) ----
+        // The chooser stored the WhatsApp-shared file in IndexedDB and sent us
+        // ?sharedid=<record id>. Upload it through the SAME /upload-lists flow
+        // as a manual selection, then show it in the existing file list.
+        (function adoptSharedFile(){
             const params = new URLSearchParams(window.location.search);
-            const sharedSid = params.get('shared');
-            if(!sharedSid) return;
+            const sharedId = params.get('sharedid');
+            if(!sharedId) return;
 
-            // A shared session always REPLACES the current local session — the
-            // user just shared a new document and expects to see it.
-            sessionId = sharedSid;
-            localStorage.setItem('search_session_id', sessionId);
-            localStorage.setItem('search_session_ts', String(Date.now()));
+            if(!window.SharedStore){ return; }
 
-            const filesList = document.getElementById('fileItems');
-            filesList.innerHTML = '';
-            const names = [];
+            const btn = document.getElementById('uploadBtn');
+            const originalText = btn ? btn.textContent : '';
 
-            // Ask the server which files this session holds.
-            fetch('/shared-files?session_id=' + encodeURIComponent(sessionId))
-                .then(r => r.ok ? r.json() : Promise.reject(r.status))
-                .then(data => {
-                    (data.files || []).forEach(function(name){
-                        names.push(name);
-                        filesList.appendChild(_makeFileItem(name));
-                    });
-                    localStorage.setItem('search_session_files', JSON.stringify(names));
+            SharedStore.getFile(sharedId).then(function(rec){
+                if(!rec) return;
+                const file = SharedStore.recordToFile(rec);
+
+                if(btn){ btn.disabled = true; btn.textContent = 'Adding shared file...'; }
+
+                // gzip like the manual flow does, then reuse /upload-lists
+                return compressFile(file).then(function(uploadFile){
+                    const formData = new FormData();
+                    formData.append('files', uploadFile, file.name);
+                    formData.append('session_id', sessionId);
+                    return fetch('/upload-lists', { method: 'POST', body: formData });
+                }).then(function(response){
+                    if(!response.ok) throw new Error('upload failed');
+                    return response.json();
+                }).then(function(result){
+                    if(!result.success) throw new Error(result.error || 'upload failed');
+                    sessionId = result.session_id;
+                    localStorage.setItem('search_session_id', sessionId);
+                    localStorage.setItem('search_session_ts', String(Date.now()));
+
+                    const filesList = document.getElementById('fileItems');
+                    filesList.innerHTML = '';
+                    filesList.appendChild(_makeFileItem(file.name));
+                    localStorage.setItem('search_session_files', JSON.stringify([file.name]));
                     document.getElementById('filesList').classList.remove('hidden');
                     document.getElementById('searchBtn').disabled = false;
 
                     const banner = document.getElementById('sharedBanner');
                     const text = document.getElementById('sharedBannerText');
-                    if(banner && text && names.length){
-                        const sizeText = data.total_bytes ? ' · ' + data.total_bytes : '';
-                        text.textContent = names.length === 1
-                            ? names[0] + sizeText
-                            : names.length + ' files received: ' + names.join(', ');
+                    if(banner && text){
+                        text.textContent = file.name + ' · ' + SharedStore.fmtSize(rec.size);
                         banner.classList.remove('hidden');
                     }
-                })
-                .catch(() => {
-                    // Session may have expired server-side; fall back to manual upload.
-                    sessionId = '';
-                    localStorage.removeItem('search_session_id');
                 });
+            }).catch(function(){
+                // fall back to normal manual upload UI
+                if(btn){ btn.disabled = false; btn.textContent = originalText; }
+            }).then(function(){
+                if(btn){ btn.disabled = false; btn.textContent = originalText; }
+                // The shared record stays in IndexedDB only until adopted here;
+                // remove it now that the server session holds the data.
+                SharedStore.deleteFile(sharedId).catch(function(){});
+            });
 
             // Clean the query string so a page refresh doesn't re-adopt.
             window.history.replaceState({}, document.title, window.location.pathname);

@@ -249,6 +249,11 @@
                         <input type="file" id="newFile" accept=".htm,.html" onchange="loadFile(this, 'new')">
                     </label>
                 </div>
+                <div id="sharedFileBanner" style="display:none; margin-top:12px; padding:12px 16px; border-radius:12px; background:#fff7ed; border:1px solid #fdba74; color:#9a3412; font-size:0.9em;">
+                    <strong>📱 Received from another app</strong>
+                    <div id="sharedFileName" style="margin-top:4px; overflow-wrap:anywhere;"></div>
+                    <div style="font-size:0.8em; margin-top:4px; opacity:0.8;">Used as Old File. Select the New File manually to compare.</div>
+                </div>
             </div>
             <button id="compareBtn" class="compare-btn" disabled onclick="compareLists()">Compare Files</button>
 
@@ -356,10 +361,38 @@
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='shared-store.js') }}"></script>
     <script>
         let oldData = { items: [], hasData: false };
         let newData = { items: [], hasData: false };
         let lastComparison = { added: [], deleted: [], changed: [] };
+
+        // ---- Shared-file adoption (Stage 2, IndexedDB) ----
+        // Chooser sent ?sharedid=<record id>. Use the shared HTML as the OLD
+        // file (File A); the user picks the NEW file (File B) manually.
+        (function adoptSharedFile(){
+            const params = new URLSearchParams(window.location.search);
+            const sharedId = params.get('sharedid');
+            if(!sharedId || !window.SharedStore) return;
+
+            SharedStore.getFile(sharedId).then(function(rec){
+                if(!rec) return;
+                return rec.blob.text().then(function(text){
+                    const items = parseItems(text);
+                    oldData = { items: items, hasData: true };
+                    document.getElementById('oldFileName').textContent = rec.filename;
+                    document.querySelector('#oldFile').parentElement.classList.add('selected');
+                    document.getElementById('sharedFileName').textContent =
+                        rec.filename + ' · ' + SharedStore.fmtSize(rec.size);
+                    document.getElementById('sharedFileBanner').style.display = 'block';
+                    checkReady();
+                });
+            }).then(function(){
+                SharedStore.deleteFile(sharedId).catch(function(){});
+            }).catch(function(){});
+
+            window.history.replaceState({}, document.title, window.location.pathname);
+        })();
 
         function loadFile(input, type) {
             const file = input.files[0];

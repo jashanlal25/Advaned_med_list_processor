@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0d6efd">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Med List">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}">
+    <title>File Received - Med List</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            padding: 20px;
+            padding-top: 90px;
+            overflow-x: hidden;
+        }
+
+        .chooser-card {
+            max-width: 480px;
+            margin: 20px auto;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            padding: 28px 22px;
+        }
+
+        .chooser-card h1 {
+            color: #16a34a;
+            font-size: 1.3em;
+            text-align: center;
+            margin-bottom: 18px;
+        }
+
+        .file-info {
+            background: #f0f4ff;
+            border: 1px solid #d5ddff;
+            border-radius: 12px;
+            padding: 14px 16px;
+            text-align: center;
+            margin-bottom: 22px;
+            word-break: break-word;
+        }
+
+        .file-info .fname {
+            font-weight: 700;
+            color: #1a1a2e;
+            font-size: 1.05em;
+            line-height: 1.4;
+        }
+
+        .file-info .fmeta {
+            color: #667;
+            font-size: 0.88em;
+            margin-top: 4px;
+        }
+
+        .chooser-card h2 {
+            color: #1a1a2e;
+            font-size: 1em;
+            text-align: center;
+            margin-bottom: 14px;
+        }
+
+        .dest-btn {
+            display: block;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 16px 18px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1em;
+            font-weight: 600;
+            text-align: left;
+            cursor: pointer;
+            min-height: 52px;
+            transition: transform 0.1s ease, opacity 0.2s;
+            font-family: inherit;
+        }
+
+        .dest-btn:active { transform: scale(0.98); }
+
+        .dest-upload    { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+        .dest-search    { background: #eef2ff; color: #3730a3; }
+        .dest-dedup     { background: #f0fdf4; color: #166534; }
+        .dest-diff      { background: #fff7ed; color: #9a3412; }
+        .dest-genhtml   { background: #fdf2f8; color: #9d174d; }
+
+        .dest-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .dest-note {
+            display: block;
+            font-size: 0.75em;
+            font-weight: 400;
+            opacity: 0.8;
+            margin-top: 3px;
+        }
+
+        .cancel-btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            margin-top: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            background: transparent;
+            color: #666;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .status-msg {
+            display: none;
+            text-align: center;
+            color: #555;
+            font-size: 0.9em;
+            padding: 12px;
+            border-radius: 10px;
+            background: #f8f9fa;
+            margin-top: 8px;
+        }
+
+        @media (max-width: 480px) {
+            body { padding: 12px; padding-top: 84px; }
+            .chooser-card { padding: 22px 16px; margin: 8px auto; }
+        }
+    </style>
+</head>
+<body>
+    {% include 'navbar_component.html' %}
+
+    <div class="chooser-card">
+        <h1>✓ File received</h1>
+
+        <div class="file-info">
+            <div class="fname" id="fname">{{ shared_payload.filename }}</div>
+            <div class="fmeta" id="fmeta">{{ shared_payload.type }} • {{ shared_payload.size }} bytes</div>
+        </div>
+
+        <h2>Where do you want to use this file?</h2>
+
+        <button class="dest-btn dest-upload" id="destUpload">
+            🚀 Upload / Process
+            <span class="dest-note">Add to the Index 3-file batch</span>
+        </button>
+        <button class="dest-btn dest-search" id="destSearch">
+            🔍 Search Medicines
+            <span class="dest-note">Search across this file</span>
+        </button>
+        <button class="dest-btn dest-dedup" id="destDedup">
+            🧹 Deduplicate
+            <span class="dest-note">Remove duplicate entries</span>
+        </button>
+        <button class="dest-btn dest-diff" id="destDiff">
+            🔄 Compare / Diff
+            <span class="dest-note">Use as File A, pick File B manually</span>
+        </button>
+        <button class="dest-btn dest-genhtml" id="destGenHtml">
+            📄 Generate HTML
+            <span class="dest-note">Turn the list into a styled HTML file</span>
+        </button>
+
+        <button class="cancel-btn" id="destCancel">✕ Cancel</button>
+
+        <div class="status-msg" id="statusMsg"></div>
+    </div>
+
+    <!-- Same-request file payload. Rendered with |tojson so <, >, & are escaped;
+         bytes are base64, never raw HTML. Consumed once, then nulled. -->
+    <script id="shared-payload" type="application/json">{{ shared_payload|tojson }}</script>
+
+    <script src="{{ url_for('static', filename='shared-store.js') }}"></script>
+    <script>
+        (function () {
+            const payloadEl = document.getElementById('shared-payload');
+            let payload = null;
+            try { payload = JSON.parse(payloadEl.textContent); } catch (e) { payload = null; }
+
+            const status = document.getElementById('statusMsg');
+            const ext = (payload && payload.ext) || '';
+            const isPdf = ext === '.pdf';
+            const isHtml = ext === '.html' || ext === '.htm';
+            const isTxt = ext === '.txt';
+
+            // Show human-readable size; disable destinations that cannot
+            // consume this file type (no fake buttons).
+            if (payload) {
+                document.getElementById('fmeta').textContent =
+                    payload.type + ' • ' + SharedStore.fmtSize(payload.size);
+            }
+            if (isPdf) {
+                // Diff parses HTML in-browser; Make HTML reads TXT/HTML; Dedup is TXT.
+                document.getElementById('destDiff').disabled = true;
+                document.getElementById('destGenHtml').disabled = true;
+                document.getElementById('destDedup').disabled = true;
+            } else if (isHtml) {
+                document.getElementById('destDedup').disabled = true;
+            }
+
+            function showStatus(msg) {
+                status.style.display = 'block';
+                status.textContent = msg;
+            }
+
+            function lockAll() {
+                document.querySelectorAll('.dest-btn, .cancel-btn').forEach(function (b) {
+                    b.disabled = true;
+                });
+            }
+
+            if (!payload || !payload.data_b64) {
+                showStatus('Could not read the received file. Please share it again.');
+                return;
+            }
+
+            let recordId = null;
+
+            function commitToIndexedDB() {
+                const blob = SharedStore.base64ToBlob(payload.data_b64, 'application/octet-stream');
+                return SharedStore.putFile(payload.filename, payload.type, ext, blob, 'shared')
+                    .then(function (record) {
+                        recordId = record.id;
+                        // File is now safely on-device. Free the in-page payload.
+                        payload = null;
+                        payloadEl.textContent = '{}';
+                        return record.id;
+                    });
+            }
+
+            function destination(kind) {
+                lockAll();
+                showStatus('Preparing…');
+                commitToIndexedDB().then(function (id) {
+                    if (kind === 'index') {
+                        return SharedStore.appendToIndexBatch(id).then(function (res) {
+                            if (!res.ok) {
+                                // Batch full — discard ONLY the new file, keep A+B+C.
+                                return SharedStore.deleteFile(id).then(function () {
+                                    showStatus('You already have 3 files in this batch. ' +
+                                               'Remove one before adding another.');
+                                });
+                            }
+                            window.location.href = '/';
+                        });
+                    }
+                    // Any other destination: clear the Index batch first (rule §11).
+                    return SharedStore.clearIndexBatch().then(function () {
+                        const map = {
+                            search: '/search?sharedid=' + encodeURIComponent(id),
+                            dedup: '/deduplicate?sharedid=' + encodeURIComponent(id),
+                            diff: '/diff?sharedid=' + encodeURIComponent(id),
+                            genhtml: '/make_html?sharedid=' + encodeURIComponent(id)
+                        };
+                        window.location.href = map[kind];
+                    });
+                }).catch(function (err) {
+                    console.warn('share destination failed:', err);
+                    showStatus('Something went wrong storing the file. Please try again.');
+                });
+            }
+
+            document.getElementById('destUpload').addEventListener('click', function () { destination('index'); });
+            document.getElementById('destSearch').addEventListener('click', function () { destination('search'); });
+            document.getElementById('destDedup').addEventListener('click', function () { destination('dedup'); });
+            document.getElementById('destDiff').addEventListener('click', function () { destination('diff'); });
+            document.getElementById('destGenHtml').addEventListener('click', function () { destination('genhtml'); });
+
+            document.getElementById('destCancel').addEventListener('click', function () {
+                lockAll();
+                showStatus('Discarded. Nothing was changed.');
+                if (recordId) {
+                    SharedStore.deleteFile(recordId);
+                } else {
+                    // Not yet committed — simply drop the in-page payload.
+                    payload = null;
+                    payloadEl.textContent = '{}';
+                }
+                setTimeout(function () { window.location.href = '/'; }, 800);
+            });
+        })();
+    </script>
+</body>
+</html>
