@@ -1193,6 +1193,142 @@ def upload_lists():
         'expires_in': SESSION_TTL
     })
 
+# ---------------------------------------------------------------------------
+# Web Share Target (Stage 2) — Android share sheet -> installed PWA
+# ---------------------------------------------------------------------------
+SHARED_ALLOWED_EXTENSIONS = ('.pdf', '.txt', '.html', '.htm')
+
+def _share_error_page(message, hint=None):
+    """Render a friendly in-app error page for failed share-target requests."""
+    return render_template('shared_error.html', message=message, hint=hint), 400
+
+@app.route('/share-target', methods=['POST'])
+def share_target():
+    """Receive a document shared from Android (WhatsApp etc.) via Web Share Target.
+
+    Validates files by EXTENSION ONLY (MIME from other apps is unreliable),
+    stores them in the same session mechanism used by /upload-lists, and
+    redirects (303) the browser to the search page with the session ready.
+    """
+    # Collect candidate files from any form field — Android/Chrome variations
+    # in field naming are tolerated, though the manifest contract names
+    # 'shared_file'.
+    candidates = []
+    for field_files in request.files.listvalues():
+        candidates.extend(field_files)
+
+    if not candidates:
+        # Text/URL-only share (no document) or invalid multipart
+        return _share_error_page(
+            'No document was received.',
+            'Only PDF, TXT and HTML/HTM files can be shared to Med List. '
+            'Open WhatsApp, select the document, then Share → Med List.')
+
+    # Validate every candidate by extension; keep the supported ones.
+    supported, rejected = [], []
+    for file in candidates:
+        if not file or not file.filename:
+            continue
+        if file.filename.lower().endswith(SHARED_ALLOWED_EXTENSIONS):
+            supported.append(file)
+        else:
+            rejected.append(file.filename)
+
+    if not supported:
+        return _share_error_page(
+            'Unsupported file type.',
+            'Only PDF, TXT and HTML/HTM files are supported. '
+            'Received: ' + ', '.join(secure_filename(f) for f in rejected[:5]))
+
+    # Create a fresh session (a share always starts a new workflow) using the
+    # same storage helpers as /upload-lists.
+    purge_expired_sessions()
+    session_id = secrets.token_urlsafe(32)
+    uploaded_files_storage[session_id] = {'files': [], 'expires_at': 0}
+    folder = _session_dir(session_id)
+    os.makedirs(folder, exist_ok=True)
+
+    saved_names = []
+    for file in supported:
+        filename = secure_filename(file.filename) or 'shared_file'
+        if not filename.lower().endswith(SHARED_ALLOWED_EXTENSIONS):
+            # secure_filename may have mangled the extension
+            continue
+        filepath = os.path.join(folder, filename)
+        try:
+            file_data = decompress_if_needed(file.read())
+        except Exception:
+            return _share_error_page('Could not read the shared file.')
+        if not file_data:
+            return _share_error_page(
+                'The shared file is empty.',
+                'The document contains no data. Check the file in WhatsApp and try again.')
+        with open(filepath, 'wb') as f:
+            f.write(file_data)
+        saved_names.append(filename)
+
+    if not saved_names:
+        return _share_error_page('Could not store the shared file. Please try again.')
+
+    os.utime(folder, None)
+    uploaded_files_storage[session_id]['files'] = [
+        os.path.join(folder, f) for f in os.listdir(folder)
+        if os.path.isfile(os.path.join(folder, f))
+    ]
+    uploaded_files_storage[session_id]['expires_at'] = time.time() + SESSION_TTL
+
+    # 303 so the installed PWA navigates to the search page with the session.
+    return redirect('/search?shared=' + session_id, code=303)
+
+
+@app.errorhandler(413)
+def too_large(error):
+    """Friendly page when a shared/uploaded file exceeds MAX_CONTENT_LENGTH."""
+    if request.path == '/share-target':
+        return _share_error_page(
+            'The shared file is too large.',
+            'Maximum size is 16MB. Try sharing a smaller document.')
+    return jsonify({'error': 'File too large. Maximum size is 16MB.'}), 413
+
+
+@app.route('/shared-files', methods=['GET'])
+def shared_files():
+    """List files held in a shared/upload session (used by the share handoff UI)."""
+    session_id = (request.args.get('session_id') or '').strip()
+    if not session_id:
+        return jsonify({'error': 'session_id required'}), 400
+
+    session_data = uploaded_files_storage.get(session_id)
+    if not session_data:
+        if not _reconstruct_session(session_id):
+            return jsonify({'error': 'Session expired', 'expired': True}), 404
+        session_data = uploaded_files_storage[session_id]
+    if time.time() > session_data['expires_at']:
+        return jsonify({'error': 'Session expired', 'expired': True}), 404
+
+    file_infos = []
+    total_bytes = 0
+    for path in session_data['files']:
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            size = 0
+        total_bytes += size
+        file_infos.append({'name': os.path.basename(path), 'size': size})
+
+    def _fmt_size(n):
+        if n < 1024: return f'{n} B'
+        if n < 1024 * 1024: return f'{n / 1024:.1f} KB'
+        return f'{n / (1024 * 1024):.1f} MB'
+
+    return jsonify({
+        'success': True,
+        'files': [f['name'] for f in file_infos],
+        'file_infos': file_infos,
+        'total_bytes': _fmt_size(total_bytes)
+    })
+
+
 @app.route('/remove-file', methods=['POST'])
 def remove_file():
     data = request.get_json()

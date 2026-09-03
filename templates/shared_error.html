@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0d6efd">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Med List">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}">
+    <title>Shared File - Med List</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            padding: 20px;
+            padding-top: 90px;
+            overflow-x: hidden;
+        }
+
+        .card {
+            max-width: 560px;
+            margin: 40px auto;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            padding: 32px 24px;
+            text-align: center;
+        }
+
+        .card .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .card h1 {
+            color: #1a1a2e;
+            font-size: 1.4em;
+            margin-bottom: 12px;
+            word-break: break-word;
+        }
+
+        .card p {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 8px;
+            word-break: break-word;
+        }
+
+        .card .hint {
+            color: #777;
+            font-size: 0.9em;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 12px;
+            margin: 16px 0;
+        }
+
+        .card a.btn {
+            display: inline-block;
+            margin-top: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            text-decoration: none;
+            padding: 14px 32px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1em;
+            min-height: 48px;
+            line-height: 48px;
+        }
+
+        @media (max-width: 480px) {
+            body { padding: 12px; padding-top: 80px; }
+            .card { padding: 24px 16px; margin: 16px auto; }
+        }
+    </style>
+</head>
+<body>
+    {% include 'navbar_component.html' %}
+
+    <div class="card">
+        <div class="icon">📱</div>
+        <h1>Shared file could not be opened</h1>
+        <p>{{ message }}</p>
+        {% if hint %}
+        <p class="hint">{{ hint }}</p>
+        {% endif %}
+        <a class="btn" href="{{ url_for('index') }}">Go to Home</a>
+    </div>
+</body>
+</html>

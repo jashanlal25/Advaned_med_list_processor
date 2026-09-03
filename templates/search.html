@@ -83,6 +83,37 @@
             background: var(--input-bg);
         }
 
+        .shared-banner {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.12), rgba(118, 75, 162, 0.12));
+            border: 1px solid rgba(102, 126, 234, 0.35);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 18px;
+            word-break: break-word;
+        }
+
+        .shared-banner .shared-banner-icon {
+            font-size: 26px;
+            line-height: 1;
+        }
+
+        .shared-banner strong {
+            color: var(--text-primary);
+            font-size: 0.95em;
+        }
+
+        .shared-banner p {
+            margin: 4px 0 0;
+            color: var(--text-secondary);
+            font-size: 0.88em;
+            line-height: 1.5;
+        }
+
+        .shared-banner.hidden { display: none; }
+
         .form-group {
             margin-bottom: 20px;
         }
@@ -477,6 +508,13 @@
         </div>
 
         <div class="upload-section">
+            <div id="sharedBanner" class="shared-banner hidden">
+                <span class="shared-banner-icon">📱</span>
+                <div>
+                    <strong>Received from another app</strong>
+                    <p id="sharedBannerText"></p>
+                </div>
+            </div>
             <h2>📁 Upload Medicine Lists</h2>
             <p>Upload your medicine list files (HTML, PDF, TXT) to search across them</p>
 
@@ -629,6 +667,58 @@ Imidol tab (1)" rows="10"></textarea>
                 document.getElementById('filesList').classList.remove('hidden');
                 document.getElementById('searchBtn').disabled = false;
             } catch(e){}
+        })();
+
+        // ---- Web Share Target handoff (Stage 2) ----
+        // /share-target stored the shared file(s) server-side under a session
+        // and redirected here with ?shared=<session_id>. Adopt that session so
+        // the shared file flows into the exact same search workflow as a
+        // manual upload.
+        (function adoptSharedSession(){
+            const params = new URLSearchParams(window.location.search);
+            const sharedSid = params.get('shared');
+            if(!sharedSid) return;
+
+            // A shared session always REPLACES the current local session — the
+            // user just shared a new document and expects to see it.
+            sessionId = sharedSid;
+            localStorage.setItem('search_session_id', sessionId);
+            localStorage.setItem('search_session_ts', String(Date.now()));
+
+            const filesList = document.getElementById('fileItems');
+            filesList.innerHTML = '';
+            const names = [];
+
+            // Ask the server which files this session holds.
+            fetch('/shared-files?session_id=' + encodeURIComponent(sessionId))
+                .then(r => r.ok ? r.json() : Promise.reject(r.status))
+                .then(data => {
+                    (data.files || []).forEach(function(name){
+                        names.push(name);
+                        filesList.appendChild(_makeFileItem(name));
+                    });
+                    localStorage.setItem('search_session_files', JSON.stringify(names));
+                    document.getElementById('filesList').classList.remove('hidden');
+                    document.getElementById('searchBtn').disabled = false;
+
+                    const banner = document.getElementById('sharedBanner');
+                    const text = document.getElementById('sharedBannerText');
+                    if(banner && text && names.length){
+                        const sizeText = data.total_bytes ? ' · ' + data.total_bytes : '';
+                        text.textContent = names.length === 1
+                            ? names[0] + sizeText
+                            : names.length + ' files received: ' + names.join(', ');
+                        banner.classList.remove('hidden');
+                    }
+                })
+                .catch(() => {
+                    // Session may have expired server-side; fall back to manual upload.
+                    sessionId = '';
+                    localStorage.removeItem('search_session_id');
+                });
+
+            // Clean the query string so a page refresh doesn't re-adopt.
+            window.history.replaceState({}, document.title, window.location.pathname);
         })();
 
         // Add event listener to the file input to enable upload button when files are selected
