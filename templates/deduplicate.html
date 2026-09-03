@@ -2,7 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0d6efd">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Med List">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icon-192.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}">
     <title>Deduplicate - MediList Pro</title>
     <style>
     * {
@@ -17,6 +25,7 @@
         min-height: 100vh;
         padding: 20px;
         padding-top: 80px;
+        overflow-x: hidden;
         transition: all 0.3s ease;
     }
 
@@ -337,6 +346,39 @@
 
     .content-page {
         padding: 30px;
+    }
+
+    /* Mobile: stack the split view vertically so it fits 360-430px screens */
+    @media (max-width: 768px) {
+        .content-page {
+            padding: 18px 12px;
+        }
+
+        .split-view-wrapper {
+            flex-direction: column;
+            height: auto;
+            overflow: visible;
+        }
+
+        .split-column {
+            min-width: 0;
+            flex: none;
+            width: 100%;
+        }
+
+        .split-divider {
+            display: none;
+        }
+
+        .split-editable,
+        .split-content {
+            min-height: 200px;
+            height: 220px;
+        }
+
+        .container-page {
+            border-radius: 0;
+        }
     }
 </style>
 </head>

@@ -39,6 +39,22 @@ app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 from chatbot_bp import chatbot_bp
 app.register_blueprint(chatbot_bp)
 
+
+@app.after_request
+def add_pwa_headers(response):
+    """Make the PWA manifest / service worker installable.
+
+    - Serve the manifest with a standard manifest media type.
+    - Let the service worker at /static/service-worker.js control the whole
+      app scope ('/'), otherwise its default scope would be limited to /static/.
+    """
+    path = request.path
+    if path == '/static/manifest.json':
+        response.headers['Content-Type'] = 'application/manifest+json; charset=utf-8'
+    elif path == '/static/service-worker.js':
+        response.headers['Service-Worker-Allowed'] = '/'
+    return response
+
 # UUID-keyed result store. Keys are unguessable tokens returned to the originating
 # client — no shared fixed keys that one user could use to read another's data.
 RESULT_TTL = 300  # seconds

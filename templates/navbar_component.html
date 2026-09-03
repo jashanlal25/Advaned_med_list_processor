@@ -352,8 +352,10 @@
             display: none;
         }
 
+        /* Keep the install button visible on mobile so the app is installable
+           from a phone; it is the primary PWA install trigger. */
         .top-buttons {
-            display: none;
+            display: flex;
         }
 
         .mobile-menu-btn {
@@ -361,7 +363,7 @@
         }
 
         .nav-actions {
-            gap: 8px;
+            gap: 6px;
         }
 
         .nav-header .theme-toggle {
@@ -399,6 +401,15 @@
         .nav-header .mobile-menu-btn {
             width: 32px !important;
             height: 32px !important;
+        }
+
+        .nav-header .top-buttons .install-btn {
+            padding: 8px 10px !important;
+            font-size: 11px !important;
+        }
+
+        .nav-header .install-btn .install-btn-icon {
+            font-size: 13px;
         }
 
         .logo-icon {
@@ -592,5 +603,19 @@
         if (window.matchMedia('(display-mode: standalone)').matches) {
             installBtn.style.display = 'none';
         }
+    }
+
+    // Register the service worker for PWA installability.
+    // Runs on every page (this component is included in all templates).
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            const swUrl = {{ url_for('static', filename='service-worker.js')|tojson }};
+            navigator.serviceWorker.register(swUrl, { scope: '/' }).then((registration) => {
+                console.log('Service Worker registered:', registration.scope);
+            }).catch((error) => {
+                // Log a warning but do not disrupt the page.
+                console.warn('Service Worker registration failed:', error);
+            });
+        });
     }
 </script>
