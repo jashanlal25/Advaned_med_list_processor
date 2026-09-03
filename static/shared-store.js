@@ -15,7 +15,8 @@
     const META_STORE = 'meta';
     const INDEX_BATCH_KEY = 'index_batch';   // array of record ids, max INDEX_BATCH_LIMIT
     const INDEX_BATCH_LIMIT = 6;             // Index/Home persistent batch capacity
-    const TTL_MS = 24 * 60 * 60 * 1000;      // 24h cleanup for orphans
+    const INDEX_BATCH_TTL_MS = 2 * 60 * 60 * 1000;  // Index files expire 2h after ADD time
+    const TTL_MS = 24 * 60 * 60 * 1000;      // 24h cleanup for orphans (non-batch records)
 
     let _dbPromise = null;
 
@@ -96,14 +97,16 @@
         });
     }
 
-    /** Remove old orphan records not referenced by any batch/state (TTL). */
+    /** Remove old orphan records not referenced by any batch/state (TTL),
+     *  plus Index batch records past their 2h TTL. */
     function cleanupOrphans() {
         return Promise.all([
             getIndexBatchIds(),
             getDiffState()
         ]).then(function (refs) {
             const keep = {};
-            (refs[0] || []).forEach(function (id) { keep[id] = true; });
+            const batchIds = refs[0] || [];
+            batchIds.forEach(function (id) { keep[id] = true; });
             if (refs[1] && refs[1].oldFileId) keep[refs[1].oldFileId] = true;
             if (refs[1] && refs[1].newFileId) keep[refs[1].newFileId] = true;
             return openDB().then(function (db) {
@@ -114,6 +117,13 @@
                     r.onsuccess = function () {
                         const now = Date.now();
                         r.result.forEach(function (rec) {
+                            const inIndexBatch = batchIds.indexOf(rec.id) !== -1;
+                            // Index batch records: 2h TTL from creation.
+                            if (inIndexBatch && now - rec.created > INDEX_BATCH_TTL_MS) {
+                                store.delete(rec.id);
+                                return;
+                            }
+                            // Orphans (not referenced anywhere): 24h TTL.
                             if (!keep[rec.id] && now - rec.created > TTL_MS) {
                                 store.delete(rec.id);
                             }
@@ -123,7 +133,10 @@
                     t.onerror = function () { resolve(true); };
                 });
             });
-        });
+        }).then(function () {
+            // Drop expired ids from the meta array so the count stays honest.
+            return purgeExpiredIndexBatch();
+        }).then(function () { return true; });
     }
 
     // ---------- index 3-file batch ----------
@@ -146,9 +159,41 @@
         });
     }
 
+    /** Remove Index batch entries whose records are older than
+     *  INDEX_BATCH_TTL_MS. Expiration is PER-FILE, based on each record's
+     *  original `created` timestamp — never reset by Process/display/refresh.
+     *  Run before rendering the batch and before enforcing the 6-file cap. */
+    function purgeExpiredIndexBatch() {
+        return getIndexBatchIds().then(function (ids) {
+            if (!ids.length) return [];
+            const now = Date.now();
+            return Promise.all(ids.map(getFile)).then(function (recs) {
+                const keepIds = [];
+                const expiredIds = [];
+                recs.forEach(function (rec, i) {
+                    if (rec && (now - rec.created) <= INDEX_BATCH_TTL_MS) {
+                        keepIds.push(rec.id);
+                    } else {
+                        // missing record or expired — drop the id either way
+                        expiredIds.push(ids[i]);
+                    }
+                });
+                if (expiredIds.length) {
+                    return Promise.all(expiredIds.map(deleteFile)).then(function () {
+                        return setMeta(INDEX_BATCH_KEY, keepIds).then(function () {
+                            return keepIds;
+                        });
+                    });
+                }
+                return ids;
+            });
+        });
+    }
+
     /** Append a file id to the Index batch. Rejects if batch already has 3. */
     function appendToIndexBatch(id) {
-        return getIndexBatchIds().then(function (ids) {
+        // Purge expired entries FIRST so stale ids never occupy the limit.
+        return purgeExpiredIndexBatch().then(function (ids) {
             if (ids.length >= INDEX_BATCH_LIMIT) {
                 return { ok: false, reason: 'full', ids: ids };
             }
@@ -159,9 +204,9 @@
         });
     }
 
-    /** Full Index batch records (in slot order). */
+    /** Full Index batch records (in slot order), expired entries purged. */
     function getIndexBatch() {
-        return getIndexBatchIds().then(function (ids) {
+        return purgeExpiredIndexBatch().then(function (ids) {
             return Promise.all(ids.map(getFile)).then(function (recs) {
                 return recs.filter(Boolean);
             });
@@ -254,6 +299,7 @@
         appendToIndexBatch: appendToIndexBatch,
         getIndexBatch: getIndexBatch,
         getIndexBatchIds: getIndexBatchIds,
+        purgeExpiredIndexBatch: purgeExpiredIndexBatch,
         removeFromIndexBatch: removeFromIndexBatch,
         clearIndexBatch: clearIndexBatch,
         getDiffState: getDiffState,
@@ -263,6 +309,7 @@
         recordToFile: recordToFile,
         base64ToBlob: base64ToBlob,
         fmtSize: fmtSize,
-        MAX_BATCH: INDEX_BATCH_LIMIT
+        MAX_BATCH: INDEX_BATCH_LIMIT,
+        INDEX_BATCH_TTL_MS: INDEX_BATCH_TTL_MS
     };
 })(window);
