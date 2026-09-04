@@ -1162,7 +1162,20 @@
         const batchItems = document.getElementById('batchItems');
         const batchCount = document.getElementById('batchCount');
 
+        // ---- PWA detection (single centralized helper) ----
+        // The persistent Index batch (Files ready panel + IndexedDB storage)
+        // is an INSTALLED-PWA-ONLY feature. Normal desktop/mobile browsers use
+        // only the ordinary upload workflow: they neither restore, render,
+        // append to, nor CLEAR the persistent batch — a normal browser load
+        // must never destroy data the installed PWA session still relies on.
+        function isStandalonePWA() {
+            return window.matchMedia('(display-mode: standalone)').matches ||
+                   window.navigator.standalone === true;
+        }
+        const standaloneMode = isStandalonePWA();
+
         function renderBatch(records) {
+            if (!standaloneMode) return;
             batchItems.innerHTML = '';
             records.forEach(function (rec) {
                 const row = document.createElement('div');
@@ -1217,8 +1230,11 @@
             SharedStore.clearIndexBatch().then(refreshBatch).catch(function () {});
         }
 
-        // Restore batch on every page load (survives PWA close / WhatsApp trips)
-        if (window.SharedStore) {
+        // Restore batch on every page load (survives PWA close / WhatsApp
+        // trips) — INSTALLED PWA ONLY. In a normal browser the batch is
+        // simply ignored: no restore, no render, and importantly no
+        // clearIndexBatch() — the persistent data is left intact.
+        if (standaloneMode && window.SharedStore) {
             SharedStore.cleanupOrphans().then(refreshBatch).catch(function () {});
         }
 
@@ -1285,8 +1301,10 @@
         // ADD a new file to the persistent batch. Only used for genuinely NEW
         // files (manual selection / WhatsApp adoption via the chooser) — never
         // for re-processing an existing batch record.
+        // INSTALLED PWA ONLY: in a normal browser, manual uploads stay in the
+        // in-page flow only and are never persisted to the Index batch.
         async function addFileToIndexBatch(file) {
-            if (!window.SharedStore) return;
+            if (!standaloneMode || !window.SharedStore) return;
             // Duplicate guard: identity = filename + size + lastModified.
             // Filename alone is NOT used — two different documents may share
             // a name legitimately.
