@@ -182,9 +182,18 @@
     <script src="{{ url_for('static', filename='shared-store.js') }}"></script>
     <script>
         (function () {
+            // Client timing diagnostics (sizes/stages only, never file contents).
+            var T0 = performance.now();
+            function tlog(label) {
+                console.debug('[share-timing] ' + label + ': ' +
+                              (performance.now() - T0).toFixed(1) + 'ms');
+            }
+            tlog('bridge script start');
+
             const payloadEl = document.getElementById('shared-payload');
             let payload = null;
             try { payload = JSON.parse(payloadEl.textContent); } catch (e) { payload = null; }
+            tlog('payload decode complete');
 
             const status = document.getElementById('statusMsg');
             const ext = (payload && payload.ext) || '';
@@ -198,6 +207,7 @@
                 document.getElementById('fmeta').textContent =
                     payload.type + ' • ' + SharedStore.fmtSize(payload.size);
             }
+            requestAnimationFrame(function () { tlog('chooser DOM visible'); });
             if (isPdf) {
                 // Diff parses HTML in-browser; Make HTML reads TXT/HTML; Dedup is TXT.
                 document.getElementById('destDiff').disabled = true;
@@ -226,10 +236,13 @@
             let recordId = null;
 
             function commitToIndexedDB() {
+                tlog('IndexedDB save start');
                 const blob = SharedStore.base64ToBlob(payload.data_b64, 'application/octet-stream');
+                tlog('Blob/File creation complete');
                 return SharedStore.putFile(payload.filename, payload.type, ext, blob, 'shared')
                     .then(function (record) {
                         recordId = record.id;
+                        tlog('IndexedDB save complete');
                         // File is now safely on-device. Free the in-page payload.
                         payload = null;
                         payloadEl.textContent = '{}';
@@ -283,6 +296,7 @@
                             dedup: '/deduplicate?sharedid=' + encodeURIComponent(id),
                             genhtml: '/make_html?sharedid=' + encodeURIComponent(id)
                         };
+                        tlog('redirect/navigation start');
                         window.location.href = map[kind];
                     });
                 }).catch(function (err) {

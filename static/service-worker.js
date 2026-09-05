@@ -7,14 +7,15 @@
  *  - Never intercept POST requests (uploads, searches, generation, etc.).
  *  - Never cache private / user-specific data.
  */
-const CACHE_NAME = 'medlist-shell-v3';
+const CACHE_NAME = 'medlist-shell-v4';
 
 const SHELL_ASSETS = [
   '/static/manifest.json',
   '/static/icon-192.png',
   '/static/icon-512.png',
   '/static/icon-maskable-192.png',
-  '/static/icon-maskable-512.png'
+  '/static/icon-maskable-512.png',
+  '/static/shared-store.js'
 ];
 
 /* Paths that must ALWAYS hit the network. These carry user data or

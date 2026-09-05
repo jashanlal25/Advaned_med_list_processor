@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, send_file, jsonify, redirect, session
-from bs4 import BeautifulSoup
 from werkzeug.utils import secure_filename
 import os
 import io
@@ -10,20 +9,52 @@ import secrets
 
 # Add list_to_htm to path for importing update_htm functions
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'list_to_htm'))
-from update_htm import (
-    parse_discount_value, generate_item_row, generate_section_header,
-    generate_js_vars_full, generate_js_vars_simple, generate_js_vars_createrows,
-    generate_js_if_blocks, generate_js_if_blocks_pdf, generate_js_if_blocks_whatsapp,
-    update_htm, generate_html_new_format
-)
-
-# Import the search functionality
 sys.path.insert(0, os.path.dirname(__file__))
-try:
-    from search_medicines import MedicineSearcher
-except ImportError as e:
-    print(f"Error importing search_medicines: {e}")
-    MedicineSearcher = None
+
+# --- Lazy heavy-import loading (share-target startup optimization) -------------
+# BeautifulSoup (~1.3s) and search_medicines/PyPDF2 (~0.7s) are only needed by
+# processing routes, never by /share-target (which only validates an extension,
+# base64-encodes bytes and renders a template). Each name below is a thin
+# callable that performs the real import on first use, then rebinds the module
+# global to the imported symbol — so /share-target never pays the import cost
+# while every other route behaves exactly as before.
+import importlib as _importlib
+
+def _lazy(module_name, name):
+    def _call(*args, **kwargs):
+        fn = getattr(_importlib.import_module(module_name), name)
+        globals()[name] = fn
+        return fn(*args, **kwargs)
+    return _call
+
+for _n in ('parse_discount_value', 'generate_item_row', 'generate_section_header',
+           'generate_js_vars_full', 'generate_js_vars_simple', 'generate_js_vars_createrows',
+           'generate_js_if_blocks', 'generate_js_if_blocks_pdf', 'generate_js_if_blocks_whatsapp',
+           'update_htm', 'generate_html_new_format'):
+    globals()[_n] = _lazy('update_htm', _n)
+del _n
+
+BeautifulSoup = _lazy('bs4', 'BeautifulSoup')
+
+def _get_searcher():
+    """Lazily import MedicineSearcher; returns None (with a printed error) if
+    the import fails, mirroring the previous module-level try/except."""
+    try:
+        from search_medicines import MedicineSearcher
+    except ImportError as e:
+        print(f"Error importing search_medicines: {e}")
+        return None
+    return MedicineSearcher
+
+# Optional timing instrumentation for the share-target request path.
+# Enable with SHARE_TIMING=1. Logs stage timings only — never file contents.
+SHARE_TIMING = bool(os.environ.get('SHARE_TIMING'))
+
+def _tlog(label, t0):
+    if SHARE_TIMING:
+        import sys as _s
+        print(f'[share-timing] {label}: {time.perf_counter() - t0:.4f}s',
+              file=_s.stderr)
 
 def decompress_if_needed(data):
     """Auto-detect and decompress gzip data, return original bytes if not compressed."""
@@ -1227,12 +1258,15 @@ def share_target():
     renders the destination-chooser page directly (HTTP 200) with the file
     bytes safely embedded for same-request transfer into IndexedDB.
     """
+    import time as _time
+    t0 = _time.perf_counter()
     # Collect candidate files from any form field — Android/Chrome variations
     # in field naming are tolerated, though the manifest contract names
     # 'shared_file'.
     candidates = []
     for field_files in request.files.listvalues():
         candidates.extend(field_files)
+    _tlog('route entered, files available', t0)
 
     if not candidates:
         # Text/URL-only share (no document) or invalid multipart
@@ -1261,6 +1295,7 @@ def share_target():
             'Received: ' + ', '.join(secure_filename(f) for f in rejected[:5]))
 
     filename = secure_filename(chosen.filename) or 'shared_file'
+    _tlog('validation complete', t0)
     if not filename.lower().endswith(SHARED_ALLOWED_EXTENSIONS):
         # secure_filename mangled the extension beyond recognition
         return _share_error_page(
@@ -1272,6 +1307,7 @@ def share_target():
         file_data = decompress_if_needed(chosen.read())
     except Exception:
         return _share_error_page('Could not read the shared file.')
+    _tlog('file.read() complete', t0)
 
     if not file_data:
         return _share_error_page(
@@ -1280,6 +1316,7 @@ def share_target():
 
     ext = '.' + filename.rsplit('.', 1)[-1].lower()
     b64 = _base64.b64encode(file_data).decode('ascii')
+    _tlog('base64 encoding complete', t0)
 
     # Payload consumed by the chooser page's JavaScript. Serialized with
     # Jinja's |tojson which escapes <, >, & — raw bytes never appear as HTML.
@@ -1291,7 +1328,10 @@ def share_target():
         'data_b64': b64,
     }
 
-    return render_template('shared_file.html', shared_payload=payload)
+    _tlog('template render start', t0)
+    response = render_template('shared_file.html', shared_payload=payload)
+    _tlog('response ready', t0)
+    return response
 
 
 @app.errorhandler(413)
@@ -1360,12 +1400,13 @@ def search_medicines():
     if not file_paths:
         return jsonify({'error': 'No files uploaded for this session'}), 400
 
-    # Check if MedicineSearcher is available
-    if MedicineSearcher is None:
+    # Check if MedicineSearcher is available (imported lazily)
+    searcher_cls = _get_searcher()
+    if searcher_cls is None:
         return jsonify({'error': 'Search functionality not available, unable to import required modules'}), 500
 
     # Perform the search
-    searcher = MedicineSearcher()
+    searcher = searcher_cls()
     results = searcher.search_medicines(file_paths, search_terms)
 
     return jsonify({
