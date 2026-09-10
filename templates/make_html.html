@@ -649,7 +649,7 @@
                         <input type="text" id="title" name="title" value="" placeholder="Enter Company Name">
                         <div class="logo-btn-wrap">
                             <label class="logo-btn" id="logoBtn" role="button" tabindex="0"
-                                   title="Upload company logo — recommended 1000×300 px, max 1 MB (PNG/JPG/WebP)"
+                                   title="Upload company logo — recommended 1000×300 px, max 2 MB (PNG/JPG/WebP)"
                                    aria-label="Company logo options">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                             </label>
@@ -657,7 +657,7 @@
                                 <button type="button" id="logoMenuChange">Change Logo</button>
                                 <button type="button" id="logoMenuRemove" class="logo-menu-danger">Remove Logo</button>
                                 <div class="logo-menu-hint">
-                                    Recommended: 1000×300 px<br>PNG / JPG / WebP • Max 1 MB
+                                    Recommended: 1000×300 px<br>PNG / JPG / WebP • Max 2 MB
                                 </div>
                             </div>
                         </div>
@@ -975,9 +975,9 @@
         const logoMenu = document.getElementById('logoMenu');
         const logoMenuChange = document.getElementById('logoMenuChange');
         const logoMenuRemove = document.getElementById('logoMenuRemove');
-        const LOGO_MAX_BYTES = 1024 * 1024;
+        const LOGO_MAX_BYTES = 2 * 1024 * 1024;
         const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-        const LOGO_BTN_TIP = 'Upload company logo — recommended 1000×300 px, max 1 MB (PNG/JPG/WebP)';
+        const LOGO_BTN_TIP = 'Upload company logo — recommended 1000×300 px, max 2 MB (PNG/JPG/WebP)';
         const LOGO_SET_TIP = 'Company logo selected — click to change or remove';
 
         function logoSelected() { return logoInput.files.length > 0; }
@@ -1079,7 +1079,7 @@
                 return;
             }
             if (file.size > LOGO_MAX_BYTES) {
-                alert('Logo image is too large. Maximum size is 1 MB.');
+                alert('Logo image is too large. Maximum size is 2 MB.');
                 logoInput.value = '';
                 refreshLogoState();
                 return;
