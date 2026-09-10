@@ -970,6 +970,119 @@ def generate_html():
         return jsonify({'error': f'Server error: {type(exc).__name__}: {exc}',
                         'detail': traceback.format_exc()}), 500
 
+# ---- Optional company-logo upload for the generated New-format .htm ----
+# Accepted image types & conservative size cap. SVG and anything else are
+# rejected. The validated bytes are base64-embedded into the generated HTML so
+# the file stays fully self-contained (no /tmp, no DB, no external URL).
+LOGO_ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'webp'}
+LOGO_MIME_BY_EXT = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'webp': 'image/webp'}
+LOGO_ALLOWED_MIME = set(LOGO_MIME_BY_EXT.values())
+LOGO_MAX_BYTES = 1024 * 1024  # ~1 MB
+
+def _trim_logo_margins(data, mime):
+    """Conservatively strip blank outer margins from an uploaded logo.
+
+    Trims ONLY contiguous border strips that are fully/near-transparent
+    (alpha <= 16) for PNG/WebP, or near-white (> 244 in every channel) for
+    opaque JPEGs. Interior artwork is never cropped, the crop is aborted if it
+    would remove more than 50% of a dimension, and the original bytes are
+    returned unchanged on any error (e.g. Pillow unavailable) so uploads never
+    break. Returns cropped bytes, or None to keep the original.
+    """
+    try:
+        from PIL import Image
+    except Exception:
+        return None
+    import io as _io
+    try:
+        im = Image.open(_io.BytesIO(data))
+        im.load()
+        rgba = im.convert('RGBA')
+        w, h = rgba.size
+        px = rgba.load()
+
+        def near_blank(x, y):
+            r, g, b, a = px[x, y]
+            if a <= 16:
+                return True
+            if a < 255:
+                return False
+            return r > 244 and g > 244 and b > 244
+
+        col_blank = [all(near_blank(x, y) for y in range(h)) for x in range(w)]
+        row_blank = [all(near_blank(x, y) for x in range(w)) for y in range(h)]
+
+        left = 0
+        while left < w and col_blank[left]:
+            left += 1
+        right = w - 1
+        while right >= left and col_blank[right]:
+            right -= 1
+        top = 0
+        while top < h and row_blank[top]:
+            top += 1
+        bottom = h - 1
+        while bottom >= top and row_blank[bottom]:
+            bottom -= 1
+
+        nw = right - left + 1
+        nh = bottom - top + 1
+        if nw <= 0 or nh <= 0:
+            return None  # whole image blank — keep original
+        # Conservative guards: only whole-strip blank margins are removed (never
+        # artwork), so crop freely — but keep >=10% of each dimension and only
+        # act when the trim is meaningful.
+        if (w - nw) < 4 and (h - nh) < 4:
+            return None
+        if nw < w * 0.10 or nh < h * 0.10:
+            return None
+        if (w * h - nw * nh) / (w * h) < 0.03:
+            return None
+
+        cropped = rgba.crop((left, top, right + 1, bottom + 1))
+        out = _io.BytesIO()
+        if mime == 'image/png':
+            cropped.save(out, format='PNG', optimize=True)
+        elif mime == 'image/webp':
+            cropped.save(out, format='WEBP', quality=92, method=4)
+        else:
+            cropped.convert('RGB').save(out, format='JPEG', quality=92, optimize=True)
+        return out.getvalue()
+    except Exception:
+        return None
+
+def _build_logo_data_url(file_obj):
+    """Validate an uploaded logo file and return a base64 data URL (or None).
+
+    Accepted: PNG / JPEG / WebP. SVG (and anything else) is rejected. Returns
+    (data_url_or_None, error_message_or_None). When no file is supplied both
+    are None.
+    """
+    import base64
+    if file_obj is None or not getattr(file_obj, 'filename', ''):
+        return None, None
+    name = (file_obj.filename or '').lower()
+    ext = name.rsplit('.', 1)[-1] if '.' in name else ''
+    if ext not in LOGO_ALLOWED_EXT or file_obj.content_type not in LOGO_ALLOWED_MIME:
+        return None, 'Logo must be a PNG, JPG/JPEG or WebP image (SVG is not allowed).'
+    stream = file_obj.stream
+    stream.seek(0, os.SEEK_END)
+    size = stream.tell()
+    stream.seek(0)
+    if size == 0:
+        return None, 'Logo image is empty.'
+    if size > LOGO_MAX_BYTES:
+        return None, 'Logo image is too large. Maximum size is 1 MB.'
+    data = stream.read()
+    mime = LOGO_MIME_BY_EXT[ext]
+    # Conservatively strip blank outer margins so the logo renders larger
+    # (Pillow optional — falls back to the original bytes if unavailable).
+    trimmed = _trim_logo_margins(data, mime)
+    if trimmed is not None:
+        data = trimmed
+    b64 = base64.b64encode(data).decode('ascii')
+    return f'data:{mime};base64,{b64}', None
+
 def _generate_html_inner():
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
@@ -997,6 +1110,16 @@ def _generate_html_inner():
 
     # Get preserve_end_marks option
     preserve_end_marks = request.form.get('preserve_end_marks', '0') == '1'
+
+    # Optional company logo — validated server-side and kept for this
+    # generation only (NOT stored/persisted). Embedded as a base64 data URL so
+    # the generated HTML remains self-contained and shareable offline.
+    logo_data_url = None
+    logo_file = request.files.get('logo')
+    if logo_file and logo_file.filename:
+        logo_data_url, logo_err = _build_logo_data_url(logo_file)
+        if logo_err:
+            return jsonify({'error': logo_err}), 400
 
     try:
         text_content = file.read().decode('utf-8')
@@ -1053,7 +1176,8 @@ def _generate_html_inner():
                          '"Extended TXT" mode from the home page (or include code|name|tp|bonus|tax).'
             }), 400
         html_new, err_new = generate_html_new_format(
-            template_path_new, items_extended, list_no, list_date, title, whatsapp_number, message
+            template_path_new, items_extended, list_no, list_date, title, whatsapp_number, message,
+            logo_data_url=logo_data_url or ''
         )
         if err_new:
             return jsonify({'error': err_new}), 500

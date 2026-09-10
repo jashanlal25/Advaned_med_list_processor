@@ -558,7 +558,7 @@ def _new_format_letter_header(letter):
 
 def generate_html_new_format(template_path, items_extended, list_no="000001",
                              list_date=None, title="ANAS SYSTEM", whatsapp_number="923337068868",
-                             message=""):
+                             message="", logo_data_url=""):
     """Generate a new-format HTML offer list.
 
     items_extended: list of dicts with keys name, value, code, tp, bonus, tax.
@@ -628,6 +628,20 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
     # Shop title — <h1 class="shopname"> HTML element
     content = re.sub(r'(<h1[^>]*class="shopname"[^>]*>)[^<]*(</h1>)',
                      lambda m: m.group(1) + title + m.group(2), content)
+
+    # Optional company logo — replaces ONLY the visible shop-title heading.
+    # The company-name text is intentionally kept everywhere else
+    # (OFFLINE_META.shopTitle, browser <title>, footer, WA/PDF/preview logic)
+    # and is used as the logo's alt/title text so it stays accessible.
+    # The template's DOM-init reads #shopTitle; removing it leaves
+    # document.getElementById("shopTitle") null, so that guard is a no-op.
+    if logo_data_url:
+        safe_title = title.replace('"', '&quot;')
+        content = re.sub(
+            r'<h1[^>]*class="shopname"[^>]*>.*?</h1>',
+            f'<img class="shoplogo" id="shopLogo" src="{logo_data_url}" '
+            f'alt="{safe_title}" title="{safe_title}" />',
+            content, count=1, flags=re.DOTALL)
 
     # Footer company name
     content = re.sub(r'<strong>[^<]*MEDICO[^<]*</strong>', f'<strong>{title}</strong>' if title.strip() else '', content)

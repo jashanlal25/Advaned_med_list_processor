@@ -439,6 +439,7 @@
                     <div style="margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
                         <button class="btn btn-copy" onclick="copyToClipboard('deduplicatedOutput')">📋 Copy</button>
                         <button class="btn btn-copy" onclick="downloadAsText()">⬇ Download</button>
+                        <button class="btn btn-copy" onclick="continueInMakeHtml()" style="background:#198754;">➡️ Continue in Make HTML</button>
                         <button class="btn btn-copy" onclick="cleanFormatOutput()">🧹 Clean Format</button>
                     </div>
                     <div id="deduplicatedOutput" class="output-box"></div>
@@ -520,6 +521,30 @@
             });
         }).then(function(){
             SharedStore.deleteFile(sharedId).catch(function(){});
+        }).catch(function(){});
+
+        window.history.replaceState({}, document.title, window.location.pathname);
+    })();
+
+    // ---- Incoming flow: "Move to Deduplicate" from /make_html ----
+    // make_html stored the edited TXT in a temporary IndexedDB record and
+    // navigated to /deduplicate?from=make_html&mkid=<id>. Load it into the paste
+    // box (the same input the manual workflow uses), then delete the record.
+    (function adoptFromMakeHtml(){
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('from') !== 'make_html') return;
+        const id = params.get('mkid');
+        if (!id || !window.SharedStore) return;
+
+        SharedStore.getFile(id).then(function(rec){
+            if (!rec) return;
+            return rec.blob.text().then(function(text){
+                document.getElementById('pasteTextarea').value = text;
+                updateRowCount();
+                showSuccess('✓ Loaded from Make HTML — press “Run Deduplication”.');
+            });
+        }).then(function(){
+            SharedStore.deleteFile(id).catch(function(){});
         }).catch(function(){});
 
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -741,6 +766,25 @@
 
     function downloadAsText() {
         if (currentToken) window.location.href = `/download?token=${currentToken}`;
+    }
+
+    // Send the FINAL deduplicated TXT back to /make_html via a temporary IndexedDB
+    // record. This uses exactly the same source as "Download" (currentData
+    // .deduplicated_text), so the two are equivalent. Exact suffix marks are
+    // preserved because the server keeps the original lines during deduplication.
+    // Profile settings on make_html (title/logo/etc.) are stored there and are
+    // not affected by this transfer. The full list is never placed in the URL.
+    async function continueInMakeHtml() {
+        const txt = (currentData && currentData.deduplicated_text) || '';
+        if (!txt.trim()) { showError('Run deduplication first.'); return; }
+        if (!window.SharedStore) { showError('Local storage is unavailable. Use “Download” instead.'); return; }
+        try {
+            const blob = new Blob([txt], { type: 'text/plain' });
+            const rec = await SharedStore.putFile('deduplicated_for_make_html.txt', 'text/plain', '.txt', blob, 'deduplicate', 0);
+            window.location.href = '/make_html?from=deduplicate&mkid=' + encodeURIComponent(rec.id);
+        } catch (e) {
+            showError('Could not transfer the data: ' + (e && e.message ? e.message : e));
+        }
     }
 
     function downloadRemovedAsText() {

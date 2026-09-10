@@ -142,6 +142,19 @@ text-rendering: optimizeLegibility;
   color:#cfe3ff;
 }
 [data-theme="light"] .shopname{ color:#0A1866; }
+/* Company logo — MAIN branding element (replaces the text shopname when a
+   logo is embedded). width:auto/height:auto + object-fit:contain preserve
+   aspect ratio; the box stays bounded so the header never becomes huge. */
+.shoplogo{
+  display:block;
+  margin:0 auto 8px;
+  width:auto;
+  max-width:min(92vw, 520px);
+  max-height:170px;
+  height:auto;
+  object-fit:contain;
+}
+.shopbox:has(.shoplogo){ padding-top:10px; padding-bottom:10px; }
 .addr{ color:var(--muted); font-size:.95rem; }
 
 /* chips */
@@ -436,6 +449,11 @@ table.table-fixed tbody td:nth-child(2){
 @media (max-width: 720px){
   .wrap{ padding:10px 8px; }
   .shopname{ font-size:22px; }
+  .shoplogo{
+    max-width:min(90vw, 400px);
+    max-height:132px;
+    margin-bottom:6px;
+  }
   .addr{ font-size:12px; }
 
   thead th, tbody td{
@@ -576,7 +594,7 @@ table.table-fixed tbody td:nth-child(2){
       </div>
 
       <div class="shopbox">
-<h1 class="shopname" id="shopTitle">SSD MEDICO                           </h1>
+<h1 class="shopname" id="shopTitle"> MEDICOS                           </h1>
         <div class="addr" >
                                         <br>                                        
 </div>
