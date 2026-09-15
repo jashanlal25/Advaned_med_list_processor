@@ -1026,30 +1026,14 @@ if (btnPrepare){
   function localPdf(){
     var payload = buildOrderPayload();
     if (!payload) return;
-    var filename = payload.shopTitle.trim().replace(/\s+/g,'_') + '_' + payload.offerId + '.pdf';
-    var content = buildPdfContent(payload);
-    var html =
-      '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
-      '<script src="https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"><\/script>' +
-      '</head><body style="margin:0;padding:0;background:#fff;">' +
-      '<div id="pg" style="width:210mm;padding:15mm 18mm;background:#fff;font-family:Arial,sans-serif;box-sizing:border-box;">' +
-        content +
-      '</div>' +
-      '<script>window.onload=function(){' +
-        'html2pdf().set({' +
-          'filename:"' + filename.replace(/\\/g,'\\\\').replace(/"/g,'\\"') + '",' +
-          'margin:0,' +
-          'html2canvas:{scale:2,backgroundColor:"#fff",logging:false,useCORS:true},' +
-          'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}' +
-        '}).from(document.getElementById("pg")).save()' +
-        '.then(function(){setTimeout(function(){window.close();},300);});' +
-      '}<\/script>' +
-      '</body></html>';
-    var blob = new Blob([html], {type:'text/html;charset=utf-8'});
-    var url = URL.createObjectURL(blob);
-    var w = window.open(url, '_blank');
-    if (!w){ alert('Popup blocked. Please allow popups.'); URL.revokeObjectURL(url); return; }
-    setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 60000);
+    var form = document.getElementById('pdfForm');
+    var input = document.getElementById('pdfPayload');
+    if (!form || !input){
+      alert('PDF form missing hai.');
+      return;
+    }
+    input.value = JSON.stringify(payload);
+    form.submit();
   }
   window.localPdf = localPdf;
 
@@ -1165,7 +1149,19 @@ if (btnPrepare){
 "function fmtBonus(s){var t=String(s==null?'':s).trim();if(!t)return '\\u2014';var l=t.replace(/\\s+/g,'').toLowerCase();return(l==='0'||l==='0.0'||l==='0.00')?'\\u2014':esc(t);}" +
 "function fmtTax(n){var x=parseFloat(n);return(!isFinite(x)||x===0)?'\\u2014':x.toFixed(2);}" +
 "function downloadPdf(){" +
-"  if(window.opener&&window.opener.localPdf){window.opener.localPdf();}" +
+"  try{" +
+"    var form=document.createElement('form');" +
+"    form.method='POST';" +
+"    form.action='https://anas-system.com/pdf.php';" +
+"    form.target='_self';" +
+"    var inp=document.createElement('input');" +
+"    inp.type='hidden';" +
+"    inp.name='payload';" +
+"    inp.value=JSON.stringify(PAYLOAD);" +
+"    form.appendChild(inp);" +
+"    document.body.appendChild(form);" +
+"    form.submit();" +
+"  }catch(e){alert('PDF error: '+e);}" +
 "}" +
 "<\/script>" +
 "</body></html>";
