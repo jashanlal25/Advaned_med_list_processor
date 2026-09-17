@@ -1385,7 +1385,8 @@
             return items;
         }
 
-        function updatePreview() {
+        function updatePreview(options = {}) {
+            const restorePageScroll = options.restorePageScroll !== false;
             const previewContent = document.getElementById('previewContent');
             const savedScrollTop = previewContent ? previewContent.scrollTop : 0;
             const savedWindowScrollY = window.scrollY;
@@ -1473,7 +1474,9 @@
 
             requestAnimationFrame(() => {
                 if (previewContent) previewContent.scrollTop = savedScrollTop;
-                window.scrollTo(0, savedWindowScrollY);
+                // On mobile, forcing the page scroll while the keyboard closes
+                // causes the visible up/down jump after pressing Enter.
+                if (restorePageScroll) window.scrollTo(0, savedWindowScrollY);
             });
         }
 
@@ -1951,7 +1954,7 @@
 
             textarea.value = lines.join('\n');
             updateItemCount();
-            updatePreview();
+            updatePreview({ restorePageScroll: false });
             savingInProgress = false;
 
             checkPendingEdit();
