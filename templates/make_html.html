@@ -598,6 +598,15 @@
         [data-theme="dark"] .preview-content tr.item-row:nth-child(even) {
             background: rgba(255,255,255,0.018);
         }
+        /* Dim mode uses a restrained amber name column for fast scanning. */
+        [data-theme="dim"] .preview-content td.col-name {
+            background: #d7bc70;
+            color: #18202f;
+        }
+        [data-theme="dim"] .preview-content td.col-name.editable-cell:hover {
+            background: #e2ca83 !important;
+            color: #111827;
+        }
 
         .undo-delete-toast {
             position: sticky;
