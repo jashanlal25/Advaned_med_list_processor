@@ -26,6 +26,11 @@
             --text-secondary: #555;
             --border-color: #e0e0e0;
             --input-bg: #f8f9fa;
+            --table-head: #e9ecef;
+            --table-row: #ffffff;
+            --table-hover: #f1f5f9;
+            --accent-soft: #f0f4ff;
+            --accent-border: #c8d8f0;
         }
 
         [data-theme="dark"] {
@@ -35,10 +40,15 @@
             --text-secondary: #aaa;
             --border-color: #333;
             --input-bg: #2a2a3e;
+            --table-head: #202a3d;
+            --table-row: #161f31;
+            --table-hover: #23314a;
+            --accent-soft: #17233a;
+            --accent-border: #30466b;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             background: var(--bg-primary);
             min-height: 100vh;
             padding: 20px;
@@ -203,16 +213,16 @@
             text-align: center;
             cursor: pointer;
             transition: all 0.3s;
-            background: #f8f9fa;
+            background: var(--input-bg);
         }
 
         .file-upload:hover {
-            background: #e9ecef;
+            background: var(--table-head);
             border-color: #0a58ca;
         }
 
         .file-upload.dragover {
-            background: #cfe2ff;
+            background: var(--accent-soft);
             border-color: #0a58ca;
         }
 
@@ -226,7 +236,7 @@
         }
 
         .file-upload-text {
-            color: #555;
+            color: var(--text-secondary);
             font-size: 16px;
         }
 
@@ -243,7 +253,7 @@
         }
 
         .editor-header h3 {
-            color: #1a1a2e;
+            color: var(--text-primary);
             font-size: 16px;
         }
 
@@ -276,24 +286,25 @@
             width: 100%;
             height: 300px;
             padding: 15px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid var(--border-color);
             border-radius: 8px;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 14px;
             line-height: 1.5;
             resize: vertical;
-            background: #f8f9fa;
+            background: var(--input-bg);
+            color: var(--text-primary);
         }
 
         .editor-textarea:focus {
             outline: none;
             border-color: #0d6efd;
-            background: #fff;
+            background: var(--bg-card);
         }
 
         .item-count {
             text-align: right;
-            color: #666;
+            color: var(--text-secondary);
             font-size: 13px;
             margin-top: 8px;
         }
@@ -438,7 +449,7 @@
 
         .tabs {
             display: flex;
-            border-bottom: 2px solid #e0e0e0;
+            border-bottom: 2px solid var(--border-color);
             margin-bottom: 15px;
         }
 
@@ -449,7 +460,7 @@
             background: none;
             font-size: 14px;
             font-weight: 600;
-            color: #666;
+            color: var(--text-secondary);
             border-bottom: 2px solid transparent;
             margin-bottom: -2px;
             transition: all 0.2s;
@@ -466,8 +477,8 @@
 
         .preview-content {
             display: none;
-            background: #f8f9fa;
-            border: 2px solid #e0e0e0;
+            background: var(--table-row);
+            border: 2px solid var(--border-color);
             border-radius: 8px;
             padding: 15px;
             max-height: 520px;
@@ -483,17 +494,18 @@
         .preview-content th, .preview-content td {
             padding: 8px 10px;
             text-align: left;
-            border-bottom: 1px solid #dee2e6;
+            border-bottom: 1px solid var(--border-color);
             vertical-align: middle;
+            color: var(--text-primary);
         }
 
         .preview-content th {
-            background: #e9ecef;
+            background: var(--table-head);
             font-weight: 600;
         }
 
         .preview-content tr:hover {
-            background: #f1f3f5;
+            background: var(--table-hover);
         }
 
         /* Column widths */
@@ -527,7 +539,7 @@
         }
 
         .preview-content .editable-cell:hover {
-            background: #e8f4ff !important;
+            background: color-mix(in srgb, #0d6efd 18%, var(--table-row)) !important;
         }
 
         /* Inline edit input styling */
@@ -538,8 +550,8 @@
             border: 2px solid #6f42c1 !important;
             border-radius: 6px !important;
             font-size: 14px !important;
-            background: #fff !important;
-            color: #111 !important;
+            background: var(--bg-card) !important;
+            color: var(--text-primary) !important;
             box-sizing: border-box !important;
             margin: -4px 0;
         }
@@ -547,6 +559,63 @@
         .inline-edit-input:focus {
             outline: none;
             box-shadow: 0 0 0 3px rgba(111, 66, 193, 0.25);
+        }
+
+        /* Make HTML has its own rich, fully legible dark surface. Light mode is
+           intentionally preserved through the existing header toggle. */
+        [data-theme="dark"] .card {
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.025);
+        }
+        [data-theme="dark"] #colToggles {
+            background: var(--accent-soft) !important;
+            border-color: var(--accent-border) !important;
+            color: var(--text-primary) !important;
+        }
+        [data-theme="dark"] #colToggles span,
+        [data-theme="dark"] #colToggles label,
+        [data-theme="dark"] #editorSection > div[style*="color: #666"] {
+            color: var(--text-primary) !important;
+        }
+        [data-theme="dark"] #filenamePreview {
+            background: var(--table-head) !important;
+            color: var(--text-primary) !important;
+        }
+        [data-theme="dark"] .preview-content {
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 12px 30px rgba(0,0,0,0.18);
+        }
+        [data-theme="dark"] .preview-content tr.item-row:nth-child(even) {
+            background: rgba(255,255,255,0.018);
+        }
+
+        .undo-delete-toast {
+            position: sticky;
+            bottom: 12px;
+            z-index: 20;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 10px 0;
+            padding: 10px 12px;
+            border: 1px solid var(--accent-border);
+            border-radius: 10px;
+            background: var(--accent-soft);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+        .undo-delete-toast.show { display: flex; }
+        .undo-delete-toast button {
+            flex: 0 0 auto;
+            border: 0;
+            border-radius: 7px;
+            padding: 7px 11px;
+            background: #0d6efd;
+            color: #fff;
+            font: inherit;
+            font-size: 12px;
+            cursor: pointer;
         }
 
         /* When editing, allow cell to expand */
@@ -607,7 +676,7 @@
                 min-width: 80px !important;
                 padding: 8px 10px !important;
                 font-size: 15px !important;
-                color: #111 !important;
+                color: var(--text-primary) !important;
                 border-radius: 5px !important;
                 margin: -2px 0 !important;
             }
@@ -789,6 +858,10 @@
                         </thead>
                         <tbody id="previewTableBody"></tbody>
                     </table>
+                </div>
+                <div id="undoDeleteToast" class="undo-delete-toast" role="status" aria-live="polite">
+                    <span id="undoDeleteMessage">Item deleted.</span>
+                    <button type="button" onclick="undoLastDelete()">↶ Undo</button>
                 </div>
 
                 <div class="item-count" id="itemCount">0 items</div>
@@ -1248,8 +1321,8 @@
             const items = [];
             const lines = text.split('\n');
 
-            for (let line of lines) {
-                line = line.trim();
+            for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+                let line = lines[lineIndex].trim();
                 if (!line) continue;
                 if (line.includes('→')) line = line.split('→')[1].trim();
                 if (!line.includes('-----')) continue;
@@ -1285,7 +1358,7 @@
                     }
                 }
 
-                items.push({ name, value, tp, bonus, tax, isExtended, endMark, original: line });
+                items.push({ name, value, tp, bonus, tax, isExtended, endMark, original: line, lineIndex });
             }
             items.sort((a, b) => a.name.toUpperCase().localeCompare(b.name.toUpperCase()));
             return items;
@@ -1350,7 +1423,7 @@
                 const da = `data-name="${escapeHtml(item.name)}" data-value="${escapeHtml(item.value)}" `+
                            `data-tp="${escapeHtml(item.tp)}" `+
                            `data-bonus="${escapeHtml(item.bonus)}" data-tax="${escapeHtml(item.tax)}" `+
-                           `data-extended="${item.isExtended ? '1' : '0'}"`;
+                           `data-extended="${item.isExtended ? '1' : '0'}" data-line-index="${item.lineIndex}"`;
 
                 let rowHtml = `<tr class="item-row" ${da}>`;
 
@@ -1881,22 +1954,48 @@
             }
         }
 
-        // Delete a row from preview and update textarea
+        // Keep the exact raw line and its position so Undo also works for items
+        // with identical names or values.
+        let lastDeletedItem = null;
+        let undoDeleteTimer = null;
+
         function deleteRow(row) {
-            const itemName = row.dataset.name || '';
-            if (itemName) removeLineFromTextarea(itemName);
+            const lineIndex = Number(row.dataset.lineIndex);
+            const itemName = row.dataset.name || 'Item';
+            const textarea = document.getElementById('editorTextarea');
+            const lines = textarea.value.split('\n');
+            if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= lines.length) return;
+
+            lastDeletedItem = { lineIndex, line: lines[lineIndex] };
+            lines.splice(lineIndex, 1);
+            textarea.value = lines.join('\n').replace(/^\s*[\r\n]+/gm, '');
+            updateItemCount();
+            updatePreview();
+            showUndoDelete(itemName);
         }
 
-        // Helper function to remove a line from textarea by item name
-        function removeLineFromTextarea(itemName) {
+        function showUndoDelete(itemName) {
+            const toast = document.getElementById('undoDeleteToast');
+            const message = document.getElementById('undoDeleteMessage');
+            if (!toast || !message) return;
+            message.textContent = `${itemName} deleted.`;
+            toast.classList.add('show');
+            clearTimeout(undoDeleteTimer);
+            undoDeleteTimer = setTimeout(() => {
+                toast.classList.remove('show');
+                lastDeletedItem = null;
+            }, 7000);
+        }
+
+        function undoLastDelete() {
+            if (!lastDeletedItem) return;
             const textarea = document.getElementById('editorTextarea');
-            let content = textarea.value;
-            const escapedName = escapeRegExp(itemName.trim());
-            // Matches both legacy "Name----- val" and extended "code|Name----- val|..."
-            const linePattern = new RegExp(`^(?:[^|\\n]*\\|)?\\s*${escapedName}\\s*-----.*$`, 'gm');
-            content = content.replace(linePattern, '').trim();
-            content = content.replace(/^\s*[\r\n]+/gm, '');
-            textarea.value = content;
+            const lines = textarea.value ? textarea.value.split('\n') : [];
+            lines.splice(Math.min(lastDeletedItem.lineIndex, lines.length), 0, lastDeletedItem.line);
+            textarea.value = lines.join('\n');
+            lastDeletedItem = null;
+            clearTimeout(undoDeleteTimer);
+            document.getElementById('undoDeleteToast').classList.remove('show');
             updateItemCount();
             updatePreview();
         }
