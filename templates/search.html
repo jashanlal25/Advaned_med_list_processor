@@ -31,6 +31,15 @@
             --text-secondary: #aaa;
         }
 
+        [data-theme="dim"] {
+            --bg-primary: linear-gradient(135deg, #0d1019 0%, #171c29 50%, #101d32 100%);
+            --bg-card: #303847;
+            --input-bg: #3a4455;
+            --border-color: #505d71;
+            --text-primary: #f4f7fb;
+            --text-secondary: #c3ccda;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: var(--bg-primary);
@@ -388,6 +397,16 @@
 
         .file-remove-btn:hover {
             background: #fee2e2;
+        }
+
+        [data-theme="dark"] .shop-info, [data-theme="dim"] .shop-info {
+            background: #223a56; color: #dcecff;
+        }
+        [data-theme="dark"] .discount-info, [data-theme="dim"] .discount-info {
+            background: #244638; color: #d7f6e4;
+        }
+        [data-theme="dark"] .file-remove-btn:hover, [data-theme="dim"] .file-remove-btn:hover {
+            background: #4a252c;
         }
 
         /* Side Panel Styles */
