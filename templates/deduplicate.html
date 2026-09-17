@@ -19,9 +19,14 @@
         box-sizing: border-box;
     }
 
+    :root { --page-bg: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); --surface: #fff; --surface-muted: #f8f9fa; --text: #333; --text-muted: #666; --border: #ddd; }
+    [data-theme="dark"] { --page-bg: linear-gradient(135deg, #0a0a12 0%, #12121a 50%, #0a1a2e 100%); --surface: #1e1e2e; --surface-muted: #292b3d; --text: #f1f4f8; --text-muted: #bbc1cf; --border: #45485e; }
+    [data-theme="dim"] { --page-bg: linear-gradient(135deg, #0d1019 0%, #171c29 50%, #101d32 100%); --surface: #303847; --surface-muted: #3a4455; --text: #f4f7fb; --text-muted: #c3ccda; --border: #505d71; }
+
     body {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        background: var(--page-bg);
+        color: var(--text);
         min-height: 100vh;
         padding: 20px;
         padding-top: 80px;
@@ -347,6 +352,24 @@
     .content-page {
         padding: 30px;
     }
+
+    /* Theme-aware overrides for the many legacy light surfaces on this page. */
+    [data-theme="dark"] .container-page, [data-theme="dim"] .container-page,
+    [data-theme="dark"] .output-box, [data-theme="dim"] .output-box,
+    [data-theme="dark"] .split-view-wrapper, [data-theme="dim"] .split-view-wrapper,
+    [data-theme="dark"] .split-editable, [data-theme="dim"] .split-editable { background: var(--surface); color: var(--text); border-color: var(--border); }
+    [data-theme="dark"] textarea, [data-theme="dim"] textarea,
+    [data-theme="dark"] .results-section, [data-theme="dim"] .results-section,
+    [data-theme="dark"] .btn-secondary, [data-theme="dim"] .btn-secondary { background: var(--surface-muted); color: var(--text); border-color: var(--border); }
+    [data-theme="dark"] .tabs, [data-theme="dim"] .tabs,
+    [data-theme="dark"] .results-tabs, [data-theme="dim"] .results-tabs { border-color: var(--border); }
+    [data-theme="dark"] .tab-btn, [data-theme="dim"] .tab-btn,
+    [data-theme="dark"] .result-tab-btn, [data-theme="dim"] .result-tab-btn { color: var(--text-muted); }
+    [data-theme="dark"] .split-divider, [data-theme="dim"] .split-divider { background: linear-gradient(90deg, transparent, var(--border), transparent); }
+    [data-theme="dark"] .success-message.show, [data-theme="dim"] .success-message.show { background: #183d31; color: #d8f3e6; border-color: #2f725a; }
+    [data-theme="dark"] .error-message.show, [data-theme="dim"] .error-message.show { background: #4a252c; color: #ffdce0; border-color: #88404b; }
+    [data-theme="dark"] #sharedFileBanner, [data-theme="dim"] #sharedFileBanner { background: var(--surface-muted) !important; border-color: var(--border) !important; color: var(--text) !important; }
+    [data-theme="dark"] [style*="color: #333"], [data-theme="dim"] [style*="color: #333"], [data-theme="dark"] [style*="color: #666"], [data-theme="dim"] [style*="color: #666"] { color: var(--text-muted) !important; }
 
     /* Mobile: stack the split view vertically so it fits 360-430px screens */
     @media (max-width: 768px) {
