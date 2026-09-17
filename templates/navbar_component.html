@@ -168,6 +168,18 @@
         box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
     }
 
+    /* Third theme: a calm, low-glare off-white surface. Page templates use the
+       shared variables below, so Dim stays consistent while navigating. */
+    body[data-theme="dim"] {
+        --bg-primary: linear-gradient(135deg, #b9c5d8 0%, #d8e0eb 50%, #aebdd3 100%);
+        --bg-card: #eef2f7;
+        --text-primary: #172033;
+        --text-secondary: #526078;
+        --border-color: #c5cedc;
+        --input-bg: #f7f9fc;
+        --shadow: 0 8px 24px rgba(31, 48, 76, 0.16);
+    }
+
     .top-buttons {
         display: flex;
         gap: 8px;
@@ -495,19 +507,25 @@
 </nav>
 
 <script>
-    // Theme toggle
+    // Cycle through Light → Dark → Dim. Dim is intentionally a soft off-white
+    // option for users who want less glare without the full dark palette.
     function toggleTheme() {
         const body = document.body;
         const themeToggle = document.getElementById('themeToggle');
+        const currentTheme = body.getAttribute('data-theme') || 'light';
 
-        if (body.getAttribute('data-theme') === 'dark') {
-            body.removeAttribute('data-theme');
-            themeToggle.textContent = '🌙';
-            localStorage.setItem('theme', 'light');
-        } else {
+        if (currentTheme === 'light') {
             body.setAttribute('data-theme', 'dark');
             themeToggle.textContent = '☀️';
             localStorage.setItem('theme', 'dark');
+        } else if (currentTheme === 'dark') {
+            body.setAttribute('data-theme', 'dim');
+            themeToggle.textContent = '🌗';
+            localStorage.setItem('theme', 'dim');
+        } else {
+            body.removeAttribute('data-theme');
+            themeToggle.textContent = '🌙';
+            localStorage.setItem('theme', 'light');
         }
     }
 
@@ -517,7 +535,10 @@
         const savedTheme = localStorage.getItem('theme');
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const themeToggle = document.getElementById('themeToggle');
-        if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        if (savedTheme === 'dim') {
+            document.body.setAttribute('data-theme', 'dim');
+            if (themeToggle) themeToggle.textContent = '🌗';
+        } else if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
             document.body.setAttribute('data-theme', 'dark');
             if (themeToggle) themeToggle.textContent = '☀️';
         } else {
