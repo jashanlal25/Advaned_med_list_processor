@@ -899,6 +899,9 @@
                 <button class="btn btn-sort btn-small" onclick="sortAlphabetically()" style="padding: 8px 12px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: background 0.2s;">
                     🔤 Sort A-Z
                 </button>
+                <button class="btn btn-sort btn-small" onclick="sortByRate()" style="padding: 8px 12px; background: #0d6efd; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: background 0.2s;">
+                    📊 Net, then Low → High
+                </button>
             </div>
         </div>
 
@@ -1346,6 +1349,16 @@
             }
         }
 
+        let currentPreviewSort = 'alpha';
+
+        function rateSortDetails(value) {
+            const raw = String(value || '');
+            const numberMatch = raw.match(/-?\d+(?:\.\d+)?/);
+            const amount = numberMatch ? Number.parseFloat(numberMatch[0]) : Number.POSITIVE_INFINITY;
+            const isNet = /\bnet\b/i.test(raw);
+            return { group: isNet ? 0 : (Number.isFinite(amount) ? 1 : 2), amount };
+        }
+
         function parseItems(text) {
             const items = [];
             const lines = text.split('\n');
@@ -1389,7 +1402,15 @@
 
                 items.push({ name, value, tp, bonus, tax, isExtended, endMark, original: line, lineIndex });
             }
-            items.sort((a, b) => a.name.toUpperCase().localeCompare(b.name.toUpperCase()));
+            items.sort((a, b) => {
+                if (currentPreviewSort === 'net_then_discount') {
+                    const aRate = rateSortDetails(a.value);
+                    const bRate = rateSortDetails(b.value);
+                    return aRate.group - bRate.group || aRate.amount - bRate.amount ||
+                        a.name.toUpperCase().localeCompare(b.name.toUpperCase());
+                }
+                return a.name.toUpperCase().localeCompare(b.name.toUpperCase());
+            });
             return items;
         }
 
@@ -1397,7 +1418,7 @@
             const restorePageScroll = options.restorePageScroll !== false;
             const previewContent = document.getElementById('previewContent');
             const savedScrollTop = previewContent ? previewContent.scrollTop : 0;
-            const savedWindowScrollY = window.scrollY;
+            const savedWindowScrollY = options.pageScrollY ?? window.scrollY;
 
             const items = parseItems(editorTextarea.value);
             const tbody = document.getElementById('previewTableBody');
@@ -1439,14 +1460,16 @@
             thead.innerHTML = headerHtml;
 
             let html = '';
-            let currentLetter = '';
+            let currentSection = '';
 
             items.forEach((item, i) => {
-                const firstLetter = item.name.charAt(0).toUpperCase();
-                if (firstLetter !== currentLetter) {
-                    currentLetter = firstLetter;
+                const section = currentPreviewSort === 'net_then_discount'
+                    ? (rateSortDetails(item.value).group === 0 ? 'NET PRICE' : 'DISCOUNT: LOW → HIGH')
+                    : item.name.charAt(0).toUpperCase();
+                if (section !== currentSection) {
+                    currentSection = section;
                     html += `<tr style="background: linear-gradient(135deg, #0d6efd, #0a58ca); color: white;">
-                        <td colspan="${visCount}" style="text-align:center;font-weight:bold;padding:8px;">${currentLetter}</td>
+                        <td colspan="${visCount}" style="text-align:center;font-weight:bold;padding:8px;">${section}</td>
                     </tr>`;
                 }
 
@@ -1480,12 +1503,14 @@
 
             tbody.innerHTML = html;
 
-            requestAnimationFrame(() => {
+            const restoreScroll = () => {
                 if (previewContent) previewContent.scrollTop = savedScrollTop;
-                // On mobile, forcing the page scroll while the keyboard closes
-                // causes the visible up/down jump after pressing Enter.
                 if (restorePageScroll) window.scrollTo(0, savedWindowScrollY);
-            });
+            };
+            requestAnimationFrame(restoreScroll);
+            // Android can move the page again while it hides the keyboard.
+            // A second restore keeps the edited row in the same place.
+            if (restorePageScroll) setTimeout(restoreScroll, 180);
         }
 
         function updateItemCount() {
@@ -1545,6 +1570,7 @@
             formData.append('list_type', document.getElementById('list_type').value);
             formData.append('output_format', document.getElementById('output_format').value);
             formData.append('message', document.getElementById('message').value);
+            formData.append('sort_order', currentPreviewSort);
 
             // Optional company logo (current generation only)
             if (logoInput.files.length) formData.append('logo', logoInput.files[0]);
@@ -1834,6 +1860,7 @@
         let isEditing = false;
         let pendingEdit = null;
         let savingInProgress = false;
+        let inlineEditScrollY = 0;
 
         // Edit a single cell inline — click any editable cell to edit it
         function editCellInline(cell, fieldType) {
@@ -1850,6 +1877,7 @@
             }
 
             isEditing = true;
+            inlineEditScrollY = window.scrollY;
             const row = cell.closest('tr');
             const itemData = {
                 name: row.dataset.name || '',
@@ -1874,19 +1902,6 @@
                 input.select();
             }
 
-            const scrollInputIntoView = () => {
-                const vv = window.visualViewport;
-                const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-                const rect = input.getBoundingClientRect();
-                if (rect.bottom > visibleBottom - 20)
-                    window.scrollBy({ top: rect.bottom - (visibleBottom - 20), behavior: 'smooth' });
-            };
-            setTimeout(scrollInputIntoView, 100);
-            if (window.visualViewport) {
-                const onKb = () => { scrollInputIntoView(); window.visualViewport.removeEventListener('resize', onKb); };
-                window.visualViewport.addEventListener('resize', onKb);
-            }
-
             input.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -1899,7 +1914,7 @@
                     saveCellEdit(fieldType, itemData, v);
                 } else if (e.key === 'Escape') {
                     isEditing = false; pendingEdit = null; savingInProgress = false;
-                    updatePreview();
+                    updatePreview({ pageScrollY: inlineEditScrollY });
                 }
             });
 
@@ -1923,7 +1938,7 @@
             if (fieldType === 'name' && !newValue) {
                 alert('Item name cannot be empty');
                 savingInProgress = false;
-                updatePreview();
+                updatePreview({ pageScrollY: inlineEditScrollY });
                 checkPendingEdit();
                 return;
             }
@@ -1962,7 +1977,7 @@
 
             textarea.value = lines.join('\n');
             updateItemCount();
-            updatePreview({ restorePageScroll: false });
+            updatePreview({ pageScrollY: inlineEditScrollY });
             savingInProgress = false;
 
             checkPendingEdit();
@@ -2107,7 +2122,22 @@
             const content = textarea.value.trim();
             if (!content) return;
 
-            // parseItems correctly extracts name from pipe format and sorts by name
+            currentPreviewSort = 'alpha';
+            const items = parseItems(content);
+            if (!items.length) return;
+
+            textarea.value = items.map(item => item.original).join('\n');
+            updateItemCount();
+            updatePreview();
+        }
+
+        function sortByRate() {
+            const textarea = document.getElementById('editorTextarea');
+            if (!textarea) return;
+            const content = textarea.value.trim();
+            if (!content) return;
+
+            currentPreviewSort = 'net_then_discount';
             const items = parseItems(content);
             if (!items.length) return;
 
