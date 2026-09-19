@@ -800,7 +800,16 @@ def parse_text_content_extended(text_content):
         })
     return items
 
-def generate_html_from_template(data_items, template_path, list_no="000001", list_date=None, title="S.S.D PHARMA", whatsapp_number="923337068868", preserve_end_marks=False):
+def _rate_sort_key(value, name=""):
+    """Net rates first, then numeric discount rates from low to high."""
+    raw = str(value or "").strip()
+    number = re.search(r'-?\d+(?:\.\d+)?', raw)
+    amount = float(number.group()) if number else float('inf')
+    is_net = bool(re.search(r'\bnet\b', raw, re.IGNORECASE))
+    return (0 if is_net else (1 if number else 2), amount, str(name or "").upper())
+
+
+def generate_html_from_template(data_items, template_path, list_no="000001", list_date=None, title="S.S.D PHARMA", whatsapp_number="923337068868", preserve_end_marks=False, sort_order="alpha"):
     """Generate HTML file from template and data items"""
     import datetime
     if list_date is None:
@@ -832,16 +841,20 @@ def generate_html_from_template(data_items, template_path, list_no="000001", lis
     if tbody_start == -1 or tbody_end == -1:
         return None, "ERROR: Could not find tbody section in template"
 
-    # Sort items alphabetically by name
-    sorted_items = sorted(data_items, key=lambda x: x[0].upper() if x[0] else "")
+    # Rate mode keeps NET items first, then discount percentages from low to high.
+    if sort_order == 'net_then_discount':
+        sorted_items = sorted(data_items, key=lambda x: _rate_sort_key(x[1], x[0]))
+    else:
+        sorted_items = sorted(data_items, key=lambda x: x[0].upper() if x[0] else "")
 
     items_html = ""
     current_letter = ""
     for i, (item_name, value) in enumerate(sorted_items, 1):
-        first_letter = item_name[0].upper() if item_name else "?"
-        if first_letter != current_letter:
-            current_letter = first_letter
-            items_html += generate_section_header(current_letter)
+        if sort_order == 'alpha':
+            first_letter = item_name[0].upper() if item_name else "?"
+            if first_letter != current_letter:
+                current_letter = first_letter
+                items_html += generate_section_header(current_letter)
         items_html += generate_item_row(i, item_name, value, preserve_end_marks)
 
     items_html += f'''<tr class="heading2"> <td style=" text-align: CENTER; border-radius: 0px 0px 16px 16px; padding-left: 10px;" colspan="5" >Total Products :
@@ -1106,6 +1119,9 @@ def _generate_html_inner():
     output_format = request.form.get('output_format', 'old').lower()
     if output_format not in ('old', 'new', 'both'):
         output_format = 'old'
+    sort_order = request.form.get('sort_order', 'alpha')
+    if sort_order not in ('alpha', 'net_then_discount'):
+        sort_order = 'alpha'
     whatsapp_number = ''.join(filter(str.isdigit, whatsapp_number))
 
     # Get preserve_end_marks option
@@ -1151,7 +1167,7 @@ def _generate_html_inner():
         if not os.path.exists(template_path_old):
             return jsonify({'error': 'Old-format template file not found'}), 500
         html_old, err_old = generate_html_from_template(
-            data_items, template_path_old, list_no, list_date, title, whatsapp_number, preserve_end_marks
+            data_items, template_path_old, list_no, list_date, title, whatsapp_number, preserve_end_marks, sort_order
         )
         if err_old:
             return jsonify({'error': err_old}), 500
@@ -1177,7 +1193,7 @@ def _generate_html_inner():
             }), 400
         html_new, err_new = generate_html_new_format(
             template_path_new, items_extended, list_no, list_date, title, whatsapp_number, message,
-            logo_data_url=logo_data_url or ''
+            logo_data_url=logo_data_url or '', sort_order=sort_order
         )
         if err_new:
             return jsonify({'error': err_new}), 500
