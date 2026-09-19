@@ -556,9 +556,17 @@ def _new_format_letter_header(letter):
     """Section header row for the new format (alphabet letter, styled like company-head)."""
     return f'<tr class="company-head"><td colspan="7">{letter}</td></tr>\n'
 
+def _new_format_rate_sort_key(item):
+    """Order NET amounts before percentage discounts, each low to high."""
+    raw = str(item.get('value') or '').strip()
+    number = re.search(r'-?\d+(?:\.\d+)?', raw)
+    amount = float(number.group()) if number else float('inf')
+    is_net = bool(re.search(r'\bnet\b', raw, re.IGNORECASE))
+    return (0 if is_net else (1 if number else 2), amount, (item.get('name') or '').upper())
+
 def generate_html_new_format(template_path, items_extended, list_no="000001",
                              list_date=None, title="ANAS SYSTEM", whatsapp_number="923337068868",
-                             message="", logo_data_url=""):
+                             message="", logo_data_url="", sort_order="alpha"):
     """Generate a new-format HTML offer list.
 
     items_extended: list of dicts with keys name, value, code, tp, bonus, tax.
@@ -572,17 +580,20 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
     with open(template_path, 'r', encoding='utf-8', newline='') as f:
         content = f.read()
 
-    # Sort by uppercase name for stable alphabetic grouping.
-    sorted_items = sorted(items_extended, key=lambda d: (d.get('name') or "").upper())
+    if sort_order == 'net_then_discount':
+        sorted_items = sorted(items_extended, key=_new_format_rate_sort_key)
+    else:
+        sorted_items = sorted(items_extended, key=lambda d: (d.get('name') or "").upper())
 
     items_html = ""
     current_letter = ""
     for i, it in enumerate(sorted_items, 1):
         name = it.get('name') or ""
-        first_letter = name[0].upper() if name else "?"
-        if first_letter != current_letter:
-            current_letter = first_letter
-            items_html += _new_format_letter_header(current_letter)
+        if sort_order == 'alpha':
+            first_letter = name[0].upper() if name else "?"
+            if first_letter != current_letter:
+                current_letter = first_letter
+                items_html += _new_format_letter_header(current_letter)
         disc_raw = it.get('value') or ""
         disc_num = _parse_disc_to_num(disc_raw)
         items_html += _new_format_item_row(
