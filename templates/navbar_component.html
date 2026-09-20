@@ -631,8 +631,9 @@
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             const swUrl = {{ url_for('static', filename='service-worker.js')|tojson }};
-            navigator.serviceWorker.register(swUrl, { scope: '/' }).then((registration) => {
+            navigator.serviceWorker.register(swUrl, { scope: '/', updateViaCache: 'none' }).then((registration) => {
                 console.log('Service Worker registered:', registration.scope);
+                registration.update().catch(() => {});
             }).catch((error) => {
                 // Log a warning but do not disrupt the page.
                 console.warn('Service Worker registration failed:', error);
