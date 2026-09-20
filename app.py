@@ -82,8 +82,10 @@ def add_pwa_headers(response):
     path = request.path
     if path == '/static/manifest.json':
         response.headers['Content-Type'] = 'application/manifest+json; charset=utf-8'
+        response.headers['Cache-Control'] = 'no-store'
     elif path == '/static/service-worker.js':
         response.headers['Service-Worker-Allowed'] = '/'
+        response.headers['Cache-Control'] = 'no-cache, max-age=0, must-revalidate'
     return response
 
 # UUID-keyed result store. Keys are unguessable tokens returned to the originating
@@ -337,6 +339,8 @@ def make_html():
 @app.route('/share', methods=['POST', 'GET'])
 def share():
     # Handle share target from PWA
+    if request.method == 'POST':
+        return share_target()
     return redirect('/?shared=true')
 
 @app.route('/upload', methods=['POST'])
@@ -1436,6 +1440,9 @@ def share_target():
         request_type = (request.mimetype or 'missing').lower()
         diagnostics = [
             ('Code', 'SHARE-NO-FILE'),
+            ('PWA receiver', 'v7' if request.headers.get('X-Medlist-Share-Worker') == 'v7' else 'not active'),
+            ('Files at PWA', str(min(int(request.headers.get('X-Medlist-Share-Files', '0')[:6]), 9999))
+                if request.headers.get('X-Medlist-Share-Files', '').isascii() and request.headers.get('X-Medlist-Share-Files', '').isdigit() else 'unknown'),
             ('Request type', request_type if request_type in (
                 'multipart/form-data', 'application/x-www-form-urlencoded',
                 'text/plain', 'application/json') else 'other / missing'),
