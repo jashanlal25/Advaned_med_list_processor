@@ -1385,9 +1385,10 @@ SHARED_FILE_TYPE_LABELS = {
     '.htm': 'HTML',
 }
 
-def _share_error_page(message, hint=None):
+def _share_error_page(message, hint=None, diagnostics=None):
     """Render a friendly in-app error page for failed share-target requests."""
-    return render_template('shared_error.html', message=message, hint=hint), 400
+    return render_template('shared_error.html', message=message, hint=hint,
+                           diagnostics=diagnostics), 400
 
 
 def _shared_file_extension(filename, data):
@@ -1430,10 +1431,25 @@ def share_target():
 
     if not candidates:
         # Text/URL-only share (no document) or invalid multipart
+        # Show only structural metadata; never echo shared text, filenames,
+        # document contents, or request headers on the public error page.
+        request_type = (request.mimetype or 'missing').lower()
+        diagnostics = [
+            ('Code', 'SHARE-NO-FILE'),
+            ('Request type', request_type if request_type in (
+                'multipart/form-data', 'application/x-www-form-urlencoded',
+                'text/plain', 'application/json') else 'other / missing'),
+            ('Request body', 'present' if (request.content_length or 0) > 0 else 'empty / unknown'),
+            ('File fields', str(len(request.files))),
+            ('Text fields', str(len(request.form))),
+            ('Share text', 'present' if request.form.get('text') else 'absent'),
+            ('Share URL', 'present' if request.form.get('url') else 'absent'),
+        ]
         return _share_error_page(
             'No document was received.',
-            'Only PDF, TXT and HTML/HTM files can be shared to Med List. '
-            'Open WhatsApp, select the document, then Share → Med List.')
+            'The app received a share request without a file attachment. '
+            'Send a screenshot of the diagnostics below so we can trace the Android handoff.',
+            diagnostics=diagnostics)
 
     # Read candidates once; Android sometimes replaces the original name with
     # an extensionless DOC-* name while preserving the file bytes.
