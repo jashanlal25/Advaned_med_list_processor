@@ -22,6 +22,8 @@
           "name": "shared_file",
           "accept": [
             "*/*",
+            "application/octet-stream",
+            "application/xhtml+xml",
             "application/pdf",
             "text/plain",
             "text/html",
