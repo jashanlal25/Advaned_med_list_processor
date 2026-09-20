@@ -62,6 +62,21 @@
             margin: 16px 0;
         }
 
+        .diagnostics {
+            margin: 16px 0 4px;
+            padding: 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #f1f5f9;
+            color: #1e293b;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        .diagnostics strong { display: block; margin-bottom: 8px; }
+        .diagnostics dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
+        .diagnostics dt { color: #475569; }
+        .diagnostics dd { font-weight: 600; overflow-wrap: anywhere; }
+
         .card a.btn {
             display: inline-block;
             margin-top: 16px;
@@ -91,6 +106,16 @@
         <p>{{ message }}</p>
         {% if hint %}
         <p class="hint">{{ hint }}</p>
+        {% endif %}
+        {% if diagnostics %}
+        <div class="diagnostics" role="status">
+            <strong>Share diagnostics</strong>
+            <dl>
+                {% for label, value in diagnostics %}
+                <dt>{{ label }}</dt><dd>{{ value }}</dd>
+                {% endfor %}
+            </dl>
+        </div>
         {% endif %}
         <a class="btn" href="{{ url_for('index') }}">Go to Home</a>
     </div>
