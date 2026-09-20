@@ -77,23 +77,6 @@
         .diagnostics dt { color: #475569; }
         .diagnostics dd { font-weight: 600; overflow-wrap: anywhere; }
 
-        .recovery {
-            margin-top: 18px;
-            padding: 16px;
-            border: 1px solid #cbd5e1;
-            border-radius: 10px;
-            text-align: left;
-            color: #1e293b;
-            background: #f8fafc;
-        }
-        .recovery p { color: #475569; font-size: 0.9em; }
-        .recovery input[type="file"] { width: 100%; margin: 12px 0; font-size: 0.95em; }
-        .recovery button {
-            width: 100%; min-height: 48px; padding: 10px 16px;
-            border: 0; border-radius: 10px; background: #0d6efd;
-            color: #fff; font-size: 1em; font-weight: 600;
-        }
-
         .card a.btn {
             display: inline-block;
             margin-top: 16px;
@@ -133,12 +116,6 @@
                 {% endfor %}
             </dl>
         </div>
-        <form class="recovery" action="{{ url_for('share_target') }}" method="post" enctype="multipart/form-data">
-            <strong>Open the file from your phone</strong>
-            <p>Android did not pass the attachment through Share. Select the same file here to open it in Med’iList Pro.</p>
-            <input type="file" name="shared_file" accept=".pdf,.txt,.htm,.html,application/pdf,text/plain,text/html" required>
-            <button type="submit">Open selected file</button>
-        </form>
         {% endif %}
         <a class="btn" href="{{ url_for('index') }}">Go to Home</a>
     </div>
