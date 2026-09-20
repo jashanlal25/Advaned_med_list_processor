@@ -4,10 +4,10 @@
  *  - Cache ONLY static shell assets (icons, manifest). No uploaded files,
  *    no search results, no chatbot messages, no API responses.
  *  - Network-first for page navigations so dynamic app pages stay fresh.
- *  - Never intercept POST requests (uploads, searches, generation, etc.).
+ *  - Normalize share-target POST bodies; pass other POST requests through.
  *  - Never cache private / user-specific data.
  */
-const CACHE_NAME = 'medlist-shell-v6';
+const CACHE_NAME = 'medlist-shell-v7';
 
 const SHELL_ASSETS = [
   '/static/manifest.json',
@@ -77,11 +77,23 @@ self.addEventListener('fetch', function (event) {
   var request = event.request;
   var url = new URL(request.url);
 
+  if (url.origin === self.location.origin && request.method === 'POST' &&
+      (url.pathname === '/share-target' || url.pathname === '/share')) {
+    event.respondWith(forwardSharedDocument(request));
+    return;
+  }
+
   // Only handle same-origin GET requests.
   if (request.method !== 'GET') {
     return;
   }
   if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Share settings must come from the current deployment, not the shell cache.
+  if (url.pathname === '/static/manifest.json') {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
     return;
   }
 
@@ -127,3 +139,35 @@ self.addEventListener('fetch', function (event) {
     })
   );
 });
+
+async function forwardSharedDocument(request) {
+  let data;
+  try {
+    data = await request.clone().formData();
+  } catch (error) {
+    // Keep the untouched request available for the server's normal handling.
+    return fetch(request);
+  }
+  const body = new FormData();
+  let files = 0;
+  let fields = 0;
+  for (const [key, value] of data.entries()) {
+    if (typeof value === 'string') {
+      body.append(key, value);
+      fields++;
+    } else {
+      body.append('shared_file', value, value.name || 'shared_file');
+      files++;
+    }
+  }
+  // Fetch creates a matching multipart boundary and serializes the File bytes.
+  // No document data is stored in caches or sent to any other origin.
+  return fetch(new URL('/share-target', self.location.origin).href, {
+    method: 'POST', body: body, credentials: 'same-origin', cache: 'no-store',
+    headers: {
+      'X-Medlist-Share-Worker': 'v7',
+      'X-Medlist-Share-Files': String(files),
+      'X-Medlist-Share-Fields': String(fields)
+    }
+  });
+}
