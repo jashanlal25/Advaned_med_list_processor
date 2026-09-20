@@ -1390,11 +1390,31 @@ def _share_error_page(message, hint=None):
     return render_template('shared_error.html', message=message, hint=hint), 400
 
 
+def _shared_file_extension(filename, data):
+    """Recover types when a sharing app replaces the original filename."""
+    lower_name = filename.lower()
+    for ext in SHARED_ALLOWED_EXTENSIONS:
+        if lower_name.endswith(ext):
+            return ext
+    head = data[:4096].lstrip(b'\xef\xbb\xbf \t\r\n').lower()
+    if head.startswith(b'%pdf-'):
+        return '.pdf'
+    if head.startswith((b'<!doctype html', b'<html')) or b'<html' in head[:1024]:
+        return '.htm'
+    try:
+        sample = data[:4096].decode('utf-8-sig')
+        if sample and not any(ord(char) < 32 and char not in '\t\r\n' for char in sample):
+            return '.txt'
+    except UnicodeDecodeError:
+        pass
+    return None
+
+
 @app.route('/share-target', methods=['POST'])
 def share_target():
     """Receive a document shared from Android (WhatsApp etc.) via Web Share Target.
 
-    Validates by EXTENSION ONLY (MIME from other apps is unreliable), then
+    Validates by extension or a small content sample (sharing apps may rename files), then
     renders the destination-chooser page directly (HTTP 200) with the file
     bytes safely embedded for same-request transfer into IndexedDB.
     """
@@ -1415,18 +1435,27 @@ def share_target():
             'Only PDF, TXT and HTML/HTM files can be shared to Med List. '
             'Open WhatsApp, select the document, then Share → Med List.')
 
-    # Validate every candidate by extension; keep the first supported file.
-    # (Web Share Target sends a single file; multiples are tolerated by taking
-    # the first valid one and mentioning the rest.)
+    # Read candidates once; Android sometimes replaces the original name with
+    # an extensionless DOC-* name while preserving the file bytes.
     chosen = None
+    file_data = None
+    ext = None
     rejected = []
     for file in candidates:
-        if not file or not file.filename:
+        if not file:
             continue
-        if file.filename.lower().endswith(SHARED_ALLOWED_EXTENSIONS):
+        try:
+            candidate_data = decompress_if_needed(file.read())
+        except Exception:
+            rejected.append(file.filename or 'unnamed file')
+            continue
+        candidate_ext = _shared_file_extension(file.filename or '', candidate_data)
+        if candidate_data and candidate_ext:
             chosen = file
+            file_data = candidate_data
+            ext = candidate_ext
             break
-        rejected.append(file.filename)
+        rejected.append(file.filename or 'unnamed file')
 
     if chosen is None:
         return _share_error_page(
@@ -1434,19 +1463,10 @@ def share_target():
             'Only PDF, TXT and HTML/HTM files are supported. '
             'Received: ' + ', '.join(secure_filename(f) for f in rejected[:5]))
 
-    filename = secure_filename(chosen.filename) or 'shared_file'
-    _tlog('validation complete', t0)
+    filename = secure_filename(chosen.filename or '') or 'shared_file'
     if not filename.lower().endswith(SHARED_ALLOWED_EXTENSIONS):
-        # secure_filename mangled the extension beyond recognition
-        return _share_error_page(
-            'Unsupported file type.',
-            'The file name could not be handled safely. '
-            'Rename it to end with .pdf, .txt, .html or .htm and share again.')
-
-    try:
-        file_data = decompress_if_needed(chosen.read())
-    except Exception:
-        return _share_error_page('Could not read the shared file.')
+        filename += ext
+    _tlog('validation complete', t0)
     _tlog('file.read() complete', t0)
 
     if not file_data:
@@ -1454,7 +1474,6 @@ def share_target():
             'The shared file is empty.',
             'The document contains no data. Check the file in WhatsApp and try again.')
 
-    ext = '.' + filename.rsplit('.', 1)[-1].lower()
     b64 = _base64.b64encode(file_data).decode('ascii')
     _tlog('base64 encoding complete', t0)
 
