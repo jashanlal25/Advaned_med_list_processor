@@ -21,6 +21,7 @@
         {
           "name": "shared_file",
           "accept": [
+            "*/*",
             "application/pdf",
             "text/plain",
             "text/html",
