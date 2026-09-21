@@ -91,6 +91,18 @@
             line-height: 48px;
         }
 
+        .recovery {
+            margin-top: 18px;
+            padding: 16px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            text-align: left;
+            color: #1e293b;
+            background: #f8fafc;
+        }
+        .recovery p { color: #475569; font-size: 0.9em; line-height: 1.5; }
+        .recovery .btn { display: block; width: 100%; text-align: center; margin-top: 12px; }
+
         @media (max-width: 480px) {
             body { padding: 12px; padding-top: 80px; }
             .card { padding: 24px 16px; margin: 16px auto; }
@@ -115,6 +127,13 @@
                 <dt>{{ label }}</dt><dd>{{ value }}</dd>
                 {% endfor %}
             </dl>
+        </div>
+        {% endif %}
+        {% if recovery and recovery.receiver_version %}
+        <div class="recovery">
+            <strong>Try sharing the file again</strong>
+            <p>MediList Pro receiver <b>{{ recovery.receiver_version }}</b> is ready. Use WhatsApp's paperclip/attachment button, choose <b>Document</b>, and select the PDF, TXT, HTML, or HTM file before tapping Share.</p>
+            <a class="btn" href="{{ url_for('index') }}">Open MediList Pro</a>
         </div>
         {% endif %}
         <a class="btn" href="{{ url_for('index') }}">Go to Home</a>

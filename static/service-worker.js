@@ -7,7 +7,8 @@
  *  - Normalize share-target POST bodies; pass other POST requests through.
  *  - Never cache private / user-specific data.
  */
-const CACHE_NAME = 'medlist-shell-v7';
+const SHARE_WORKER_VERSION = 'v8';
+const CACHE_NAME = 'medlist-shell-v8';
 
 const SHELL_ASSETS = [
   '/static/manifest.json',
@@ -69,6 +70,15 @@ self.addEventListener('activate', function (event) {
       );
     }).then(function () {
       return self.clients.claim();
+    }).then(function () {
+      return self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    }).then(function (clientsList) {
+      clientsList.forEach(function (client) {
+        client.postMessage({
+          type: 'SHARE_WORKER_UPDATED',
+          version: SHARE_WORKER_VERSION
+        });
+      });
     })
   );
 });
@@ -165,9 +175,10 @@ async function forwardSharedDocument(request) {
   return fetch(new URL('/share-target', self.location.origin).href, {
     method: 'POST', body: body, credentials: 'same-origin', cache: 'no-store',
     headers: {
-      'X-Medlist-Share-Worker': 'v7',
+      'X-Medlist-Share-Worker': SHARE_WORKER_VERSION,
       'X-Medlist-Share-Files': String(files),
-      'X-Medlist-Share-Fields': String(fields)
+      'X-Medlist-Share-Fields': String(fields),
+      'X-Medlist-Share-Payload': files > 0 ? 'file' : (fields > 0 ? 'text-only' : 'empty')
     }
   });
 }

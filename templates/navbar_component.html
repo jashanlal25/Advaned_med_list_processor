@@ -629,11 +629,27 @@
     // Register the service worker for PWA installability.
     // Runs on every page (this component is included in all templates).
     if ('serviceWorker' in navigator) {
+        let shareWorkerRefreshStarted = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (shareWorkerRefreshStarted) {
+                return;
+            }
+            shareWorkerRefreshStarted = true;
+            window.location.reload();
+        });
+
         window.addEventListener('load', () => {
             const swUrl = {{ url_for('static', filename='service-worker.js')|tojson }};
             navigator.serviceWorker.register(swUrl, { scope: '/', updateViaCache: 'none' }).then((registration) => {
                 console.log('Service Worker registered:', registration.scope);
-                registration.update().catch(() => {});
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+                return registration.update();
+            }).then((registration) => {
+                if (registration && registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
             }).catch((error) => {
                 // Log a warning but do not disrupt the page.
                 console.warn('Service Worker registration failed:', error);

@@ -1379,6 +1379,7 @@ def upload_lists():
 # ---------------------------------------------------------------------------
 import base64 as _base64
 
+SHARE_WORKER_VERSION = 'v8'
 SHARED_ALLOWED_EXTENSIONS = ('.pdf', '.txt', '.html', '.htm')
 
 # Per-type destination compatibility (mirrors each page's file input accept=)
@@ -1389,10 +1390,10 @@ SHARED_FILE_TYPE_LABELS = {
     '.htm': 'HTML',
 }
 
-def _share_error_page(message, hint=None, diagnostics=None):
+def _share_error_page(message, hint=None, diagnostics=None, recovery=None):
     """Render a friendly in-app error page for failed share-target requests."""
     return render_template('shared_error.html', message=message, hint=hint,
-                           diagnostics=diagnostics), 400
+                           diagnostics=diagnostics, recovery=recovery), 400
 
 
 def _shared_file_extension(filename, data):
@@ -1438,25 +1439,40 @@ def share_target():
         # Show only structural metadata; never echo shared text, filenames,
         # document contents, or request headers on the public error page.
         request_type = (request.mimetype or 'missing').lower()
+        receiver_header = request.headers.get('X-Medlist-Share-Worker') or ''
+        receiver_version = receiver_header if receiver_header else 'not active'
+        files_at_pwa = 'unknown'
+        files_header = request.headers.get('X-Medlist-Share-Files', '')
+        if files_header.isascii() and files_header.isdigit():
+            files_at_pwa = str(min(int(files_header[:6]), 9999))
+        payload_header = request.headers.get('X-Medlist-Share-Payload') or ''
+        payload_state = payload_header if payload_header in (
+            'file', 'text-only', 'empty') else 'not reported'
+        has_text = bool(request.form.get('text'))
+        has_url = bool(request.form.get('url'))
+        if payload_state == 'text-only' or (payload_state == 'not reported' and has_text):
+            message = 'Share text was received, but no document was attached.'
+            hint = 'In WhatsApp, tap the attachment/paperclip icon, choose **Document**, select the PDF/TXT/HTML file, then share it to Med List. Sharing a caption or link alone does not include the file.'
+        else:
+            message = 'No document was received.'
+            hint = 'Android did not pass an attachment through Share. Reopen the file in WhatsApp, use **Share → MediList Pro**, and confirm the file itself is selected—not only its caption or link.'
         diagnostics = [
             ('Code', 'SHARE-NO-FILE'),
-            ('PWA receiver', 'v7' if request.headers.get('X-Medlist-Share-Worker') == 'v7' else 'not active'),
-            ('Files at PWA', str(min(int(request.headers.get('X-Medlist-Share-Files', '0')[:6]), 9999))
-                if request.headers.get('X-Medlist-Share-Files', '').isascii() and request.headers.get('X-Medlist-Share-Files', '').isdigit() else 'unknown'),
+            ('PWA receiver', receiver_version),
+            ('Files at PWA', files_at_pwa),
+            ('Payload state', payload_state),
             ('Request type', request_type if request_type in (
                 'multipart/form-data', 'application/x-www-form-urlencoded',
                 'text/plain', 'application/json') else 'other / missing'),
             ('Request body', 'present' if (request.content_length or 0) > 0 else 'empty / unknown'),
             ('File fields', str(len(request.files))),
             ('Text fields', str(len(request.form))),
-            ('Share text', 'present' if request.form.get('text') else 'absent'),
-            ('Share URL', 'present' if request.form.get('url') else 'absent'),
+            ('Share text', 'present' if has_text else 'absent'),
+            ('Share URL', 'present' if has_url else 'absent'),
         ]
         return _share_error_page(
-            'No document was received.',
-            'The app received a share request without a file attachment. '
-            'Send a screenshot of the diagnostics below so we can trace the Android handoff.',
-            diagnostics=diagnostics)
+            message, hint, diagnostics=diagnostics,
+            recovery={'receiver_version': SHARE_WORKER_VERSION})
 
     # Read candidates once; Android sometimes replaces the original name with
     # an extensionless DOC-* name while preserving the file bytes.
