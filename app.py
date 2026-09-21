@@ -1379,7 +1379,7 @@ def upload_lists():
 # ---------------------------------------------------------------------------
 import base64 as _base64
 
-SHARE_WORKER_VERSION = 'v8'
+SHARE_WORKER_VERSION = 'v9'
 SHARED_ALLOWED_EXTENSIONS = ('.pdf', '.txt', '.html', '.htm')
 
 # Per-type destination compatibility (mirrors each page's file input accept=)
@@ -1438,40 +1438,87 @@ def share_target():
         # Text/URL-only share (no document) or invalid multipart
         # Show only structural metadata; never echo shared text, filenames,
         # document contents, or request headers on the public error page.
+        def safe_header(name, allowed=None, default='unknown', limit=120):
+            value = (request.headers.get(name) or '').strip()[:limit]
+            if not value:
+                return default
+            if allowed is not None and value not in allowed:
+                return default
+            return value
+
         request_type = (request.mimetype or 'missing').lower()
-        receiver_header = request.headers.get('X-Medlist-Share-Worker') or ''
-        receiver_version = receiver_header if receiver_header else 'not active'
-        files_at_pwa = 'unknown'
-        files_header = request.headers.get('X-Medlist-Share-Files', '')
-        if files_header.isascii() and files_header.isdigit():
-            files_at_pwa = str(min(int(files_header[:6]), 9999))
-        payload_header = request.headers.get('X-Medlist-Share-Payload') or ''
-        payload_state = payload_header if payload_header in (
-            'file', 'text-only', 'empty') else 'not reported'
+        receiver_version = safe_header(
+            'X-Medlist-Share-Worker', allowed=('v7', 'v8', 'v9'),
+            default='not active')
+        request_id = safe_header('X-Medlist-Share-Request-Id')
+        client = safe_header('X-Medlist-Share-Client')
+        incoming_type = safe_header('X-Medlist-Share-Incoming-Type')
+        incoming_length = safe_header('X-Medlist-Share-Incoming-Length')
+        incoming_files = safe_header('X-Medlist-Share-Incoming-Files')
+        incoming_fields = safe_header('X-Medlist-Share-Incoming-Fields')
+        outgoing_files = safe_header('X-Medlist-Share-Outgoing-Files')
+        outgoing_fields = safe_header('X-Medlist-Share-Outgoing-Fields')
+        parse_state = safe_header(
+            'X-Medlist-Share-Parse-State', allowed=('parsed', 'failed'),
+            default='not reported')
+        failure_stage = safe_header(
+            'X-Medlist-Share-Failure-Stage',
+            allowed=('none', 'source-share-sheet', 'service-worker-parse',
+                     'service-worker-forward', 'server-multipart'),
+            default='server-multipart')
+        payload_state = safe_header(
+            'X-Medlist-Share-Payload',
+            allowed=('file', 'text-only', 'metadata-only', 'empty'),
+            default='not reported')
+        has_title = bool(request.form.get('title'))
         has_text = bool(request.form.get('text'))
         has_url = bool(request.form.get('url'))
+
         if payload_state == 'text-only' or (payload_state == 'not reported' and has_text):
             message = 'Share text was received, but no document was attached.'
-            hint = 'In WhatsApp, tap the attachment/paperclip icon, choose **Document**, select the PDF/TXT/HTML file, then share it to Med List. Sharing a caption or link alone does not include the file.'
+        elif payload_state == 'metadata-only' or has_title:
+            message = 'Share metadata was received, but no document was attached.'
         else:
             message = 'No document was received.'
-            hint = 'Android did not pass an attachment through Share. Reopen the file in WhatsApp, use **Share → MediList Pro**, and confirm the file itself is selected—not only its caption or link.'
+
+        if incoming_files == '0':
+            likely_cause = 'Android sent no file to the PWA. The loss happened before MediList Pro could forward the request.'
+        elif incoming_files not in ('unknown', '0') and len(request.files) == 0:
+            likely_cause = 'The PWA saw a file, but Flask received no file field. The loss happened while forwarding or parsing the multipart body.'
+        elif receiver_version == 'not active':
+            likely_cause = 'The request reached Flask without the MediList service worker, so the original Android handoff could not be inspected.'
+        else:
+            likely_cause = 'No file field reached Flask. Compare the incoming and outgoing counts below to locate the failing stage.'
+
         diagnostics = [
             ('Code', 'SHARE-NO-FILE'),
+            ('Request ID', request_id),
+            ('Failure stage', failure_stage),
+            ('Likely cause', likely_cause),
             ('PWA receiver', receiver_version),
-            ('Files at PWA', files_at_pwa),
+            ('Client', client),
+            ('Incoming content type', incoming_type),
+            ('Incoming body size', incoming_length),
+            ('FormData parse', parse_state),
+            ('Incoming files', incoming_files),
+            ('Incoming fields', incoming_fields),
+            ('Outgoing files', outgoing_files),
+            ('Outgoing fields', outgoing_fields),
             ('Payload state', payload_state),
-            ('Request type', request_type if request_type in (
+            ('Server request type', request_type if request_type in (
                 'multipart/form-data', 'application/x-www-form-urlencoded',
                 'text/plain', 'application/json') else 'other / missing'),
-            ('Request body', 'present' if (request.content_length or 0) > 0 else 'empty / unknown'),
-            ('File fields', str(len(request.files))),
-            ('Text fields', str(len(request.form))),
-            ('Share text', 'present' if has_text else 'absent'),
-            ('Share URL', 'present' if has_url else 'absent'),
+            ('Server body', 'present' if (request.content_length or 0) > 0 else 'empty / unknown'),
+            ('Server file fields', str(len(request.files))),
+            ('Server text fields', str(len(request.form))),
+            ('Title field', 'present' if has_title else 'absent'),
+            ('Text field', 'present' if has_text else 'absent'),
+            ('URL field', 'present' if has_url else 'absent'),
         ]
         return _share_error_page(
-            message, hint, diagnostics=diagnostics,
+            message,
+            'This report shows each step of the Android → service worker → Flask handoff without exposing file contents or filenames.',
+            diagnostics=diagnostics,
             recovery={'receiver_version': SHARE_WORKER_VERSION})
 
     # Read candidates once; Android sometimes replaces the original name with

@@ -76,6 +76,7 @@
         .diagnostics dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
         .diagnostics dt { color: #475569; }
         .diagnostics dd { font-weight: 600; overflow-wrap: anywhere; }
+        .diagnostics dd.long-value { grid-column: 1 / -1; margin: -2px 0 8px; padding: 8px; background: #fff; border-radius: 6px; font-weight: 500; }
 
         .card a.btn {
             display: inline-block;
@@ -121,10 +122,11 @@
         {% endif %}
         {% if diagnostics %}
         <div class="diagnostics" role="status">
-            <strong>Share diagnostics</strong>
+            <strong>Share handoff diagnostics</strong>
+            <p>No file contents or filenames are included. Send a screenshot of this panel when reporting the issue.</p>
             <dl>
                 {% for label, value in diagnostics %}
-                <dt>{{ label }}</dt><dd>{{ value }}</dd>
+                <dt>{{ label }}</dt><dd{% if label == 'Likely cause' %} class="long-value"{% endif %}>{{ value }}</dd>
                 {% endfor %}
             </dl>
         </div>
