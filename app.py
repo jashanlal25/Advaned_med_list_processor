@@ -1379,7 +1379,7 @@ def upload_lists():
 # ---------------------------------------------------------------------------
 import base64 as _base64
 
-SHARE_WORKER_VERSION = 'v10'
+SHARE_WORKER_VERSION = 'v11'
 SHARED_ALLOWED_EXTENSIONS = ('.pdf', '.txt', '.html', '.htm')
 
 # Per-type destination compatibility (mirrors each page's file input accept=)
@@ -1417,6 +1417,7 @@ def _shared_file_extension(filename, data):
 
 
 @app.route('/share-target', methods=['POST'])
+@app.route('/share-target-v11', methods=['POST'])
 def share_target():
     """Receive a document shared from Android (WhatsApp etc.) via Web Share Target.
 
@@ -1449,7 +1450,7 @@ def share_target():
         request_type = (request.mimetype or 'missing').lower()
         receiver_version = safe_header(
             'X-Medlist-Share-Worker', allowed=('v7', 'v8', 'v9'),
-            default='direct (v10)')
+            default='direct (v11)')
         request_id = safe_header('X-Medlist-Share-Request-Id')
         client = safe_header('X-Medlist-Share-Client')
         incoming_type = safe_header('X-Medlist-Share-Incoming-Type')
@@ -1488,8 +1489,8 @@ def share_target():
         else:
             message = 'No document was received.'
 
-        if receiver_version == 'direct (v10)':
-            likely_cause = 'Chrome sent the original Android share request directly to Flask, but it contained no file field. The service worker did not inspect or rebuild this request.'
+        if receiver_version == 'direct (v11)':
+            likely_cause = 'Chrome sent the original Android share request directly to Flask through the v11 MIME-only share target, but it contained no file field. The service worker did not inspect or rebuild this request.'
         elif incoming_files == '0':
             likely_cause = 'Android sent no file to the PWA. The loss happened before MediList Pro could forward the request.'
         elif incoming_files not in ('unknown', '0') and len(request.files) == 0:
@@ -1502,7 +1503,7 @@ def share_target():
             ('Request ID', request_id),
             ('Failure stage', failure_stage),
             ('Likely cause', likely_cause),
-            ('Share path', 'Chrome → Flask (service worker bypassed)' if receiver_version == 'direct (v10)' else 'Chrome → service worker → Flask'),
+            ('Share path', 'Chrome → Flask (service worker bypassed)' if receiver_version == 'direct (v11)' else 'Chrome → service worker → Flask'),
             ('PWA receiver', receiver_version),
             ('Client', client),
             ('Incoming content type', incoming_type),

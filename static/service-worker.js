@@ -7,8 +7,8 @@
  *  - Let share-target POST bodies go directly to Flask unchanged.
  *  - Never cache private / user-specific data.
  */
-const SHARE_WORKER_VERSION = 'v10';
-const CACHE_NAME = 'medlist-shell-v10';
+const SHARE_WORKER_VERSION = 'v11';
+const CACHE_NAME = 'medlist-shell-v11';
 
 const SHELL_ASSETS = [
   '/static/manifest.json',
@@ -34,6 +34,7 @@ const NETWORK_ONLY_PREFIXES = [
   '/preview-html',
   '/share',
   '/share-target',
+  '/share-target-v11',
   '/shared-file',
   '/search',
   '/diff'
@@ -91,7 +92,8 @@ self.addEventListener('fetch', function (event) {
   // original multipart body directly to Flask so no service-worker FormData
   // parsing or multipart reserialization can alter the Android handoff.
   if (url.origin === self.location.origin && request.method === 'POST' &&
-      (url.pathname === '/share-target' || url.pathname === '/share')) {
+      (url.pathname === '/share-target' || url.pathname === '/share-target-v11' ||
+       url.pathname === '/share')) {
     return;
   }
 
