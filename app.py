@@ -1379,7 +1379,7 @@ def upload_lists():
 # ---------------------------------------------------------------------------
 import base64 as _base64
 
-SHARE_WORKER_VERSION = 'v9'
+SHARE_WORKER_VERSION = 'v10'
 SHARED_ALLOWED_EXTENSIONS = ('.pdf', '.txt', '.html', '.htm')
 
 # Per-type destination compatibility (mirrors each page's file input accept=)
@@ -1449,7 +1449,7 @@ def share_target():
         request_type = (request.mimetype or 'missing').lower()
         receiver_version = safe_header(
             'X-Medlist-Share-Worker', allowed=('v7', 'v8', 'v9'),
-            default='not active')
+            default='direct (v10)')
         request_id = safe_header('X-Medlist-Share-Request-Id')
         client = safe_header('X-Medlist-Share-Client')
         incoming_type = safe_header('X-Medlist-Share-Incoming-Type')
@@ -1465,7 +1465,7 @@ def share_target():
             'X-Medlist-Share-Failure-Stage',
             allowed=('none', 'source-share-sheet', 'service-worker-parse',
                      'service-worker-forward', 'server-multipart'),
-            default='server-multipart')
+            default='direct-to-server')
         payload_state = safe_header(
             'X-Medlist-Share-Payload',
             allowed=('file', 'text-only', 'metadata-only', 'empty'),
@@ -1473,20 +1473,27 @@ def share_target():
         has_title = bool(request.form.get('title'))
         has_text = bool(request.form.get('text'))
         has_url = bool(request.form.get('url'))
+        if payload_state == 'not reported':
+            if has_text:
+                payload_state = 'text-only'
+            elif has_title or len(request.form) > 0:
+                payload_state = 'metadata-only'
+            else:
+                payload_state = 'empty'
 
-        if payload_state == 'text-only' or (payload_state == 'not reported' and has_text):
+        if payload_state == 'text-only':
             message = 'Share text was received, but no document was attached.'
         elif payload_state == 'metadata-only' or has_title:
             message = 'Share metadata was received, but no document was attached.'
         else:
             message = 'No document was received.'
 
-        if incoming_files == '0':
+        if receiver_version == 'direct (v10)':
+            likely_cause = 'Chrome sent the original Android share request directly to Flask, but it contained no file field. The service worker did not inspect or rebuild this request.'
+        elif incoming_files == '0':
             likely_cause = 'Android sent no file to the PWA. The loss happened before MediList Pro could forward the request.'
         elif incoming_files not in ('unknown', '0') and len(request.files) == 0:
             likely_cause = 'The PWA saw a file, but Flask received no file field. The loss happened while forwarding or parsing the multipart body.'
-        elif receiver_version == 'not active':
-            likely_cause = 'The request reached Flask without the MediList service worker, so the original Android handoff could not be inspected.'
         else:
             likely_cause = 'No file field reached Flask. Compare the incoming and outgoing counts below to locate the failing stage.'
 
@@ -1495,6 +1502,7 @@ def share_target():
             ('Request ID', request_id),
             ('Failure stage', failure_stage),
             ('Likely cause', likely_cause),
+            ('Share path', 'Chrome → Flask (service worker bypassed)' if receiver_version == 'direct (v10)' else 'Chrome → service worker → Flask'),
             ('PWA receiver', receiver_version),
             ('Client', client),
             ('Incoming content type', incoming_type),
@@ -1517,7 +1525,7 @@ def share_target():
         ]
         return _share_error_page(
             message,
-            'This report shows each step of the Android → service worker → Flask handoff without exposing file contents or filenames.',
+            'This report shows whether Chrome delivered the original Android share directly to Flask. No file contents or filenames are exposed.',
             diagnostics=diagnostics,
             recovery={'receiver_version': SHARE_WORKER_VERSION})
 
