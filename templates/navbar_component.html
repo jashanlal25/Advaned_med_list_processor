@@ -679,16 +679,16 @@
             dialog.id = 'installChoices';
             dialog.setAttribute('aria-labelledby', 'installChoicesTitle');
             dialog.innerHTML = `<div class="install-brand"><img src="/static/icon-192.png" alt=""><h2 id="installChoicesTitle">Install MedList</h2></div>
+                <button type="button" class="install-choice" id="choosePWA">Install PWA</button>
+                <p>Install the browser-based app.</p>
                 <a class="install-choice" href="https://github.com/jashanlal25/Advaned_med_list_processor/releases/download/native-latest/MedList-Native.apk">Download Android APK</a>
                 <p>Android 8 or newer · Test version with native file sharing.</p>
-                <details open><summary>How to install the APK</summary><ol>
+                <details><summary>How to install the APK</summary><ol>
                     <li>Download the APK, then open it from Downloads.</li>
                     <li>If Android asks, allow installation from this browser or file manager, then return to the installer.</li>
                     <li>If Play Protect offers a scan, tap <strong>Scan app</strong> and wait for the result.</li>
                     <li>If the scan reports no threats and installation is offered, tap <strong>Install</strong>, then <strong>Open</strong>. Button names can vary by phone.</li>
                 </ol><p>Keep Play Protect enabled. If it reports a harmful app or blocks installation, stop and share the warning with us.</p></details>
-                <button type="button" class="install-choice" id="choosePWA">Install PWA</button>
-                <p>Keep using the browser-based option. For the reported WhatsApp sharing issue, try the Android APK.</p>
                 <details><summary>Switching from the old PWA?</summary><p>Install and test MedList Native first. Save or export anything you need from the old PWA, then long-press its icon and choose Uninstall or Remove. Its saved files do not automatically transfer to the APK.</p></details>
                 <button type="button" class="install-close" id="closeInstallChoices">Close</button>`;
             document.body.appendChild(dialog);
