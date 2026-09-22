@@ -13,6 +13,7 @@ import android.view.*;
 import android.widget.*;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
+import androidx.core.content.FileProvider;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -62,6 +63,7 @@ public final class MainActivity extends Activity {
         toolbar.setVisibility(View.GONE);
 
         web = new WebView(this);
+        web.setBackgroundColor(Color.rgb(18, 34, 56));
         FrameLayout content = new FrameLayout(this);
         content.addView(web, new FrameLayout.LayoutParams(-1, -1));
         int unit = Math.max(1, Math.round(getResources().getDisplayMetrics().density));
@@ -79,7 +81,7 @@ public final class MainActivity extends Activity {
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " MedListNative/1.3");
+        settings.setUserAgentString(settings.getUserAgentString() + " MedListNative/1.4");
         // The existing website gates its persistent file batch on standalone mode.
         // Set this before page scripts run, only on the exact MedList origin.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -90,6 +92,14 @@ public final class MainActivity extends Activity {
             new AlertDialog.Builder(this).setTitle("Update Android System WebView")
                 .setMessage("Update Android System WebView in the Play Store to enable shared-file processing in this app.")
                 .setPositiveButton("OK", null).show();
+        }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(web, "MedListNativeShare",
+                Collections.singleton(ShareUpload.ORIGIN), (view, message, origin, mainFrame, reply) -> {
+                    if (!mainFrame || !ShareUpload.isTrusted(origin.toString()) ||
+                        !ShareUpload.isTrusted(view.getUrl()) || message.getData() == null) return;
+                    receiveGeneratedFile(message.getData());
+                });
         }
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
@@ -149,6 +159,14 @@ public final class MainActivity extends Activity {
         File[] old = getCacheDir().listFiles();
         if (old != null) for (File file : old)
             if (file.getName().startsWith("medlist-") && System.currentTimeMillis() - file.lastModified() > 86400000L) file.delete();
+        File shareRoot = new File(getCacheDir(), "shares");
+        File[] oldShares = shareRoot.listFiles();
+        if (oldShares != null) for (File folder : oldShares)
+            if (System.currentTimeMillis() - folder.lastModified() > 86400000L) {
+                File[] files = folder.listFiles();
+                if (files != null) for (File item : files) item.delete();
+                folder.delete();
+            }
     }
 
     @Override protected void onNewIntent(Intent intent) {
@@ -231,6 +249,50 @@ public final class MainActivity extends Activity {
                     // Keep the private copy for retry/recreation; expire it after 24h.
                 });
             } catch (Exception e) { fail("Could not prepare file: " + safeMessage(e) + " Tap Retry."); }
+        });
+    }
+
+    private void receiveGeneratedFile(String data) {
+        if (busy || pendingDownload != null) { toast("Finish the current transfer first."); return; }
+        if (data.length() > 22 * 1024 * 1024) { toast("Generated file is too large to share."); return; }
+        busy = true;
+        toolbar.setVisibility(View.VISIBLE);
+        status.setText("Preparing HTML…");
+        worker.execute(() -> {
+            try {
+                JSONObject request = new JSONObject(data);
+                String action = request.getString("action");
+                if (!"share".equals(action) && !"save".equals(action)) throw new IOException("Unknown action");
+                String filename = ShareUpload.safeName(request.getString("filename"));
+                if (!filename.toLowerCase(Locale.ROOT).endsWith(".htm") &&
+                    !filename.toLowerCase(Locale.ROOT).endsWith(".html")) throw new IOException("Only HTML files can be shared.");
+                byte[] bytes = android.util.Base64.decode(request.getString("data_b64"), android.util.Base64.DEFAULT);
+                if (bytes.length == 0 || bytes.length > ShareUpload.MAX_FILE_BYTES)
+                    throw new IOException("Generated HTML exceeds the file size limit.");
+                if ("save".equals(action)) {
+                    File staged = File.createTempFile("medlist-download-", ".htm", getCacheDir());
+                    try (OutputStream out = new FileOutputStream(staged)) { out.write(bytes); }
+                    runOnUiThread(() -> offerSave(staged, filename, "text/html"));
+                } else {
+                    File folder = new File(getCacheDir(), "shares/" + UUID.randomUUID());
+                    if (!folder.mkdirs()) throw new IOException("Could not prepare the shared file.");
+                    File output = new File(folder, filename);
+                    try (OutputStream out = new FileOutputStream(output)) { out.write(bytes); }
+                    runOnUiThread(() -> {
+                        if (isDestroyed()) return;
+                        busy = false;
+                        toolbar.setVisibility(View.GONE);
+                        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", output);
+                        Intent send = new Intent(Intent.ACTION_SEND);
+                        send.setType("text/html");
+                        send.putExtra(Intent.EXTRA_STREAM, uri);
+                        send.setClipData(ClipData.newRawUri(filename, uri));
+                        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        try { startActivity(Intent.createChooser(send, "Share HTML file")); }
+                        catch (ActivityNotFoundException e) { toast("No app can share this file."); }
+                    });
+                }
+            } catch (Exception e) { fail("Could not prepare HTML: " + safeMessage(e)); }
         });
     }
 
