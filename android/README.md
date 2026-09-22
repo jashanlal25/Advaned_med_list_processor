@@ -76,3 +76,14 @@ The GitHub workflow installs the toolchain, runs tests and lint, then builds the
 Automated unit tests cover exact origin restrictions, multipart header injection,
 binary byte preservation, extensionless names, and size limits. These checks do
 not replace testing actual Android content grants from WhatsApp on your phone.
+
+### Local share receipt (v1.3)
+The native receiver stages the granted URI in private cache, builds a bundled
+chooser locally, and uses the website origin for IndexedDB. No attachment POST
+or chooser download is needed. Selecting a destination stores the file locally
+and opens the existing tool; that tool may upload when processing is requested.
+The chooser works offline; online tools still need connectivity.
+
+Run `python android/tools/bundle_share.py` from the repository root after changing
+`templates/shared_file.html` or `static/shared-store.js`, then commit the generated
+`android/app/src/main/assets/share.html`. Raw document HTML is never executed.

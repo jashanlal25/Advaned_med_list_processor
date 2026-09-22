@@ -55,19 +55,31 @@ public final class MainActivity extends Activity {
         retry.setText("Retry");
         retry.setVisibility(View.GONE);
         retry.setOnClickListener(view -> {
-            if (pendingShare != null && pendingShare.exists()) uploadPending();
+            if (pendingShare != null && pendingShare.exists()) openPending();
             else web.reload();
         });
         toolbar.addView(retry);
         toolbar.setVisibility(View.GONE);
-        root.addView(toolbar);
+
         web = new WebView(this);
-        root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
+        FrameLayout content = new FrameLayout(this);
+        content.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        int unit = Math.max(1, Math.round(getResources().getDisplayMetrics().density));
+        ProgressBar spinner = new ProgressBar(this);
+        toolbar.addView(spinner, 0, new LinearLayout.LayoutParams(24 * unit, 24 * unit));
+        toolbar.setPadding(12 * unit, 4 * unit, 12 * unit, 4 * unit);
+        toolbar.setBackgroundColor(Color.rgb(25, 43, 67));
+        status.setTextSize(13);
+        status.setMaxLines(2);
+        FrameLayout.LayoutParams floating = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        floating.setMargins(16 * unit, 0, 16 * unit, 16 * unit);
+        content.addView(toolbar, floating);
+        root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " MedListNative/1.2");
+        settings.setUserAgentString(settings.getUserAgentString() + " MedListNative/1.3");
         // The existing website gates its persistent file batch on standalone mode.
         // Set this before page scripts run, only on the exact MedList origin.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -89,6 +101,9 @@ public final class MainActivity extends Activity {
                 if (ShareUpload.isTrusted(request.getUrl().toString())) return false;
                 if (request.isForMainFrame()) openExternal(request.getUrl());
                 return true;
+            }
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                if (!busy) { toolbar.setVisibility(View.VISIBLE); status.setText("Opening…"); }
             }
             @Override public void onPageFinished(WebView view, String url) {
                 if (!busy && retry.getVisibility() != View.VISIBLE) toolbar.setVisibility(View.GONE);
@@ -124,7 +139,7 @@ public final class MainActivity extends Activity {
             if (cached != null) {
                 File file = new File(getCacheDir(), cached);
                 if (file.exists()) { pendingShare = file; pendingName = state.getString("pendingName", "shared_document");
-                    showError("Transfer interrupted. Tap Retry to upload the saved attachment."); }
+                    showError("Tap Retry to reopen the saved attachment."); }
             }
         } else {
             if (IncomingShare.isShare(getIntent())) handleShare(getIntent());
@@ -154,7 +169,7 @@ public final class MainActivity extends Activity {
         retry.setVisibility(View.GONE);
         web.stopLoading();
         toolbar.setVisibility(View.VISIBLE);
-        status.setText("Reading shared document…");
+        status.setText("Preparing file…");
         Uri uri = uris.get(0);
         worker.execute(() -> {
             File staged = null;
@@ -179,7 +194,7 @@ public final class MainActivity extends Activity {
                     pendingShare = ready;
                     pendingName = filename;
                     busy = false;
-                    uploadPending();
+                    openPending();
                 });
             } catch (Exception e) {
                 if (staged != null) staged.delete();
@@ -189,37 +204,39 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void uploadPending() {
+    private void openPending() {
         if (busy || pendingShare == null) return;
         busy = true;
         retry.setVisibility(View.GONE);
         toolbar.setVisibility(View.VISIBLE);
-        status.setText("Receiving document… This may take a moment on mobile data.");
+        status.setText("Preparing file…");
         File file = pendingShare;
         String name = pendingName;
-        String cookie = CookieManager.getInstance().getCookie(ShareUpload.ORIGIN);
         worker.execute(() -> {
             try {
-                ShareUpload.Response response = ShareUpload.upload(file, name, cookie);
+                byte[] bytes = LocalShare.readDocument(file);
+                ByteArrayOutputStream template = new ByteArrayOutputStream();
+                try (InputStream input = getAssets().open("share.html")) {
+                    ShareUpload.copyLimited(input, template, 1024 * 1024);
+                }
+                String html = LocalShare.render(template.toString("UTF-8"), name, bytes);
                 runOnUiThread(() -> {
                     if (isDestroyed()) return;
-                    for (String value : response.cookies) CookieManager.getInstance().setCookie(ShareUpload.ORIGIN, value);
-                    CookieManager.getInstance().flush();
                     busy = false;
-                    status.setText("Opening MedList…");
-                    // This is server-generated chooser HTML, never raw user-supplied HTML.
-                    // Its HTTPS base preserves IndexedDB, relative links and same-origin fetch.
-                    web.loadDataWithBaseURL(ShareUpload.ORIGIN + "/share-target", response.html,
-                        "text/html", "UTF-8", ShareUpload.ORIGIN + "/share-target");
-                    file.delete();
-                    pendingShare = null;
+                    toolbar.setVisibility(View.GONE);
+                    // No network request: all chooser assets and document bytes are local.
+                    // HTTPS base keeps the same IndexedDB as the online processing tools.
+                    web.loadDataWithBaseURL(ShareUpload.ORIGIN + "/native-share", html,
+                        "text/html", "UTF-8", ShareUpload.ORIGIN + "/native-share");
+                    // Keep the private copy for retry/recreation; expire it after 24h.
                 });
-            } catch (Exception e) { fail("Upload failed: " + safeMessage(e) + " Tap Retry; the attachment is still saved."); }
+            } catch (Exception e) { fail("Could not prepare file: " + safeMessage(e) + " Tap Retry."); }
         });
     }
 
     private void downloadFile(String url, String name, String mime) {
         busy = true;
+        toolbar.setVisibility(View.VISIBLE);
         status.setText("Preparing download…");
         String cookie = CookieManager.getInstance().getCookie(ShareUpload.ORIGIN);
         worker.execute(() -> {
@@ -247,6 +264,7 @@ public final class MainActivity extends Activity {
 
     private void downloadBlob(String url, String name, String mime) {
         busy = true;
+        toolbar.setVisibility(View.VISIBLE);
         status.setText("Preparing download…");
         // Read only the requested same-origin blob; no persistent JavaScript-to-native bridge.
         String token = "__medlistDownload" + UUID.randomUUID().toString().replace("-", "");
@@ -286,6 +304,7 @@ public final class MainActivity extends Activity {
     private void offerSave(File file, String name, String mime) {
         if (isDestroyed()) { file.delete(); return; }
         busy = false;
+        toolbar.setVisibility(View.GONE);
         pendingDownload = file;
         Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         save.addCategory(Intent.CATEGORY_OPENABLE);
@@ -336,12 +355,18 @@ public final class MainActivity extends Activity {
         return "Connection or file access was interrupted.";
     }
     private void fail(String message) { runOnUiThread(() -> { if (!isDestroyed()) { busy = false; showError(message); } }); }
-    private void showError(String message) { toolbar.setVisibility(View.VISIBLE); status.setText(message); retry.setVisibility(View.VISIBLE); }
+    private void showError(String message) {
+        toolbar.setVisibility(View.GONE);
+        new AlertDialog.Builder(this).setTitle("MedList").setMessage(message)
+            .setPositiveButton("Retry", (dialog, which) -> {
+                if (pendingShare != null && pendingShare.exists()) openPending(); else web.reload();
+            }).setNegativeButton("Close", null).show();
+    }
     private void toast(String message) { Toast.makeText(this, message, Toast.LENGTH_LONG).show(); }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         web.saveState(state);
-        if (pendingShare != null) { state.putString("pendingShare", pendingShare.getName()); state.putString("pendingName", pendingName); }
+        if (pendingShare != null && (busy || (ShareUpload.ORIGIN + "/native-share").equals(web.getUrl()))) { state.putString("pendingShare", pendingShare.getName()); state.putString("pendingName", pendingName); }
     }
     @SuppressWarnings("deprecation")
     @Override public void onBackPressed() {

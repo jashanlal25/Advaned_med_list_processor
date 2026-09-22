@@ -23,6 +23,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Verify offline share chooser
+        run: |
+          python android/tools/bundle_share.py
+          git diff --exit-code -- android/app/src/main/assets/share.html
+          node android/tools/test-local-share.cjs
       - name: Test, lint and build installable test APK
         working-directory: android
         run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
