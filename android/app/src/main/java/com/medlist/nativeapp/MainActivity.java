@@ -11,6 +11,8 @@ import android.provider.OpenableColumns;
 import android.webkit.*;
 import android.view.*;
 import android.widget.*;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -24,6 +26,7 @@ public final class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private WebView web;
     private TextView status;
+    private LinearLayout toolbar;
     private Button retry;
     private ValueCallback<Uri[]> fileCallback;
     private File pendingShare, pendingDownload;
@@ -41,12 +44,8 @@ public final class MainActivity extends Activity {
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        LinearLayout toolbar = new LinearLayout(this);
+        toolbar = new LinearLayout(this);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        Button home = new Button(this);
-        home.setText("Home");
-        home.setOnClickListener(view -> { if (!busy) web.loadUrl(ShareUpload.ORIGIN + "/"); });
-        toolbar.addView(home);
         status = new TextView(this);
         status.setTextColor(Color.WHITE);
         status.setText("MedList Native");
@@ -60,6 +59,7 @@ public final class MainActivity extends Activity {
             else web.reload();
         });
         toolbar.addView(retry);
+        toolbar.setVisibility(View.GONE);
         root.addView(toolbar);
         web = new WebView(this);
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -67,6 +67,17 @@ public final class MainActivity extends Activity {
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        // The existing website gates its persistent file batch on standalone mode.
+        // Set this before page scripts run, only on the exact MedList origin.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(web,
+                "Object.defineProperty(navigator,'standalone',{get:()=>true});",
+                Collections.singleton(ShareUpload.ORIGIN));
+        } else {
+            new AlertDialog.Builder(this).setTitle("Update Android System WebView")
+                .setMessage("Update Android System WebView in the Play Store to enable shared-file processing in this app.")
+                .setPositiveButton("OK", null).show();
+        }
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -79,7 +90,7 @@ public final class MainActivity extends Activity {
                 return true;
             }
             @Override public void onPageFinished(WebView view, String url) {
-                if (!busy) status.setText("MedList Native");
+                if (!busy && retry.getVisibility() != View.VISIBLE) toolbar.setVisibility(View.GONE);
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame() && !busy) showError("Page could not load. Check your connection.");
@@ -115,8 +126,8 @@ public final class MainActivity extends Activity {
                     showError("Transfer interrupted. Tap Retry to upload the saved attachment."); }
             }
         } else {
-            web.loadUrl(ShareUpload.ORIGIN + "/");
-            handleShare(getIntent());
+            if (IncomingShare.isShare(getIntent())) handleShare(getIntent());
+            else web.loadUrl(ShareUpload.ORIGIN + "/");
         }
         // Cache is private and excluded from backups; expire abandoned transfer files.
         File[] old = getCacheDir().listFiles();
@@ -140,6 +151,8 @@ public final class MainActivity extends Activity {
         if (uris.size() != 1) { showError("Please share one document at a time; no files were uploaded."); return; }
         busy = true;
         retry.setVisibility(View.GONE);
+        web.stopLoading();
+        toolbar.setVisibility(View.VISIBLE);
         status.setText("Reading shared document…");
         Uri uri = uris.get(0);
         worker.execute(() -> {
@@ -179,7 +192,8 @@ public final class MainActivity extends Activity {
         if (busy || pendingShare == null) return;
         busy = true;
         retry.setVisibility(View.GONE);
-        status.setText("Uploading document to MedList…");
+        toolbar.setVisibility(View.VISIBLE);
+        status.setText("Receiving document… This may take a moment on mobile data.");
         File file = pendingShare;
         String name = pendingName;
         String cookie = CookieManager.getInstance().getCookie(ShareUpload.ORIGIN);
@@ -321,7 +335,7 @@ public final class MainActivity extends Activity {
         return "Connection or file access was interrupted.";
     }
     private void fail(String message) { runOnUiThread(() -> { if (!isDestroyed()) { busy = false; showError(message); } }); }
-    private void showError(String message) { status.setText(message); retry.setVisibility(View.VISIBLE); }
+    private void showError(String message) { toolbar.setVisibility(View.VISIBLE); status.setText(message); retry.setVisibility(View.VISIBLE); }
     private void toast(String message) { Toast.makeText(this, message, Toast.LENGTH_LONG).show(); }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
