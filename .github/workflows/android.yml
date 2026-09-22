@@ -6,7 +6,7 @@ on:
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,3 +38,14 @@ jobs:
           path: |
             android/app/build/reports/tests/
             android/app/build/reports/lint-results-debug.html
+      - name: Publish downloadable Android test build
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/build/medlist-native-apk'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk MedList-Native.apk
+          if ! gh release view native-latest >/dev/null 2>&1; then
+            gh release create native-latest --target "$GITHUB_SHA" --title "MedList Native Android (test build)" --notes "Android 8 or newer. Test build for native file sharing." --prerelease
+          fi
+          gh release upload native-latest MedList-Native.apk --clobber
