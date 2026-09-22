@@ -2,6 +2,41 @@
 <!-- This component includes CSS, HTML, and JavaScript for the navigation header -->
 
 <style>
+    #installBtn[hidden], #nativeUpgradeNotice[hidden] { display: none !important; }
+    @media (display-mode: standalone), (display-mode: fullscreen) {
+        #installBtn { display: none !important; }
+    }
+    #installChoices {
+        position: fixed; inset: 0; margin: auto; box-sizing: border-box;
+        width: min(420px, calc(100vw - 32px)); max-width: none;
+        max-height: calc(100dvh - 40px); overflow-y: auto;
+        padding: 24px; border: 1px solid #6574b5; border-radius: 20px;
+        background: #172440; color: #f7f8ff; text-align: left;
+        box-shadow: 0 24px 80px #0009; font: 15px/1.5 system-ui, sans-serif;
+    }
+    #installChoices::backdrop { background: #081020b8; backdrop-filter: blur(4px); }
+    #installChoices h2 { font-size: 22px; color: #fff; margin: 0; }
+    #installChoices p { margin: 8px 0 16px; color: #d5dcee; font-size: 14px; }
+    #installChoices .install-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    #installChoices .install-brand img { width: 48px; height: 48px; border-radius: 12px; }
+    #installChoices .install-choice { display: block; box-sizing: border-box; width: 100%; padding: 13px;
+        border: 0; border-radius: 12px; color: white; font: inherit; font-weight: 600;
+        text-align: center; text-decoration: none; cursor: pointer; background: #6755c5; }
+    #installChoices #choosePWA { background: #14785f; }
+    #installChoices details { margin: 16px 0; padding: 12px; border-radius: 12px; background: #223454; }
+    #installChoices summary { cursor: pointer; font-weight: 600; }
+    #installChoices ol { padding-left: 22px; margin: 12px 0 0; }
+    #installChoices li { margin: 9px 0; }
+    #installChoices .install-close { display: block; margin: 16px 0 0 auto; padding: 9px 18px;
+        background: transparent; border: 1px solid #8290b4; border-radius: 10px; color: #fff; font: inherit; cursor: pointer; }
+    #nativeUpgradeNotice { position: fixed; top: 78px; left: 12px; right: 12px; z-index: 1001;
+        max-width: 440px; margin: 0 auto; padding: 16px; box-sizing: border-box;
+        background: #203454; color: #fff; border: 1px solid #788bd0; border-radius: 14px;
+        box-shadow: 0 8px 28px #0005; font: 14px/1.45 system-ui, sans-serif; }
+    #nativeUpgradeNotice p { margin: 8px 0; color: #e0e7f5; }
+    #nativeUpgradeNotice button { padding: 9px 12px; margin: 6px 6px 0 0; border-radius: 8px;
+        border: 1px solid #94a4c8; background: #384f78; color: #fff; cursor: pointer; }
+
     /* ========== EXTRAORDINARY NAVIGATION HEADER ========== */
     .nav-header {
         position: fixed;
@@ -468,7 +503,7 @@
 
     <div class="nav-actions">
         <div class="top-buttons">
-            <button class="install-btn" id="installBtn" onclick="showInstallHelp()">
+            <button class="install-btn" id="installBtn" hidden onclick="showInstallHelp()">
                 <span class="install-btn-icon">📲</span>
                 <span>Install</span>
             </button>
@@ -615,24 +650,65 @@
         }
     }
 
+    const standaloneDisplay = window.matchMedia('(display-mode: standalone)');
+    function isNativeMedList() {
+        return window.__MEDLIST_NATIVE__ === true || /MedListNative\//.test(navigator.userAgent) ||
+            (/Android/.test(navigator.userAgent) && navigator.standalone === true && !standaloneDisplay.matches);
+    }
+    function isInstalledMedListWindow() {
+        return isNativeMedList() || standaloneDisplay.matches || navigator.standalone === true ||
+            window.matchMedia('(display-mode: fullscreen)').matches;
+    }
+    function updateInstallVisibility() {
+        if (installBtn) installBtn.hidden = isInstalledMedListWindow();
+    }
+    updateInstallVisibility();
+    standaloneDisplay.addEventListener('change', updateInstallVisibility);
+    window.addEventListener('appinstalled', () => { if (installBtn) installBtn.hidden = true; });
+
     function showInstallHelp() {
         let dialog = document.getElementById('installChoices');
         if (!dialog) {
             dialog = document.createElement('dialog');
             dialog.id = 'installChoices';
             dialog.setAttribute('aria-labelledby', 'installChoicesTitle');
-            dialog.style.cssText = 'max-width:360px;width:calc(100% - 48px);padding:24px;border:1px solid #667eea;border-radius:18px;background:var(--bg-primary,#162238);color:var(--text-primary,#fff);box-shadow:0 12px 48px #0008';
-            dialog.innerHTML = '<h2 id="installChoicesTitle" style="margin-top:0">Install MedList</h2>' +
-                '<button type="button" id="choosePWA" style="display:block;width:100%;padding:15px;margin:12px 0;border:0;border-radius:10px;background:#167b60;color:white;font-size:16px">Install PWA</button>' +
-                '<p style="font-size:14px">Use the browser-based app.</p>' +
-                '<a href="https://github.com/jashanlal25/Advaned_med_list_processor/releases/download/native-latest/MedList-Native.apk" style="display:block;padding:15px;margin:12px 0;border-radius:10px;background:#6654bf;color:white;text-align:center;text-decoration:none">Download Android APK</a>' +
-                '<p style="font-size:14px">Android 8 or newer · Test version with native file sharing.</p>' +
-                '<button type="button" id="closeInstallChoices" style="padding:10px 16px">Close</button>';
+            dialog.innerHTML = `<div class="install-brand"><img src="/static/icon-192.png" alt=""><h2 id="installChoicesTitle">Install MedList</h2></div>
+                <a class="install-choice" href="https://github.com/jashanlal25/Advaned_med_list_processor/releases/download/native-latest/MedList-Native.apk">Download Android APK</a>
+                <p>Android 8 or newer · Test version with native file sharing.</p>
+                <details open><summary>How to install the APK</summary><ol>
+                    <li>Download the APK, then open it from Downloads.</li>
+                    <li>If Android asks, allow installation from this browser or file manager, then return to the installer.</li>
+                    <li>If Play Protect offers a scan, tap <strong>Scan app</strong> and wait for the result.</li>
+                    <li>If the scan reports no threats and installation is offered, tap <strong>Install</strong>, then <strong>Open</strong>. Button names can vary by phone.</li>
+                </ol><p>Keep Play Protect enabled. If it reports a harmful app or blocks installation, stop and share the warning with us.</p></details>
+                <button type="button" class="install-choice" id="choosePWA">Install PWA</button>
+                <p>Keep using the browser-based option. For the reported WhatsApp sharing issue, try the Android APK.</p>
+                <details><summary>Switching from the old PWA?</summary><p>Install and test MedList Native first. Save or export anything you need from the old PWA, then long-press its icon and choose Uninstall or Remove. Its saved files do not automatically transfer to the APK.</p></details>
+                <button type="button" class="install-close" id="closeInstallChoices">Close</button>`;
             document.body.appendChild(dialog);
             dialog.querySelector('#choosePWA').onclick = function () { dialog.close(); installPWA(); };
             dialog.querySelector('#closeInstallChoices').onclick = function () { dialog.close(); };
         }
-        dialog.showModal();
+        if (!dialog.open) dialog.showModal();
+    }
+
+    // Browsers cannot reliably detect this sideloaded APK. Offer a suggestion,
+    // never treat an unknown installation state as proof that it is absent.
+    if (/Android/.test(navigator.userAgent) && !isNativeMedList()) {
+        let dismissed = false;
+        try { dismissed = localStorage.getItem('nativeSharingNoticeDismissed') === 'yes'; } catch (_) {}
+        if (!dismissed) {
+            const notice = document.createElement('aside');
+            notice.id = 'nativeUpgradeNotice';
+            notice.setAttribute('aria-label', 'Android file sharing option');
+            notice.innerHTML = '<strong>Trouble sharing files?</strong><p>Try the new MedList Native APK for Android file sharing. After testing it, you can remove the old PWA.</p><button type="button" id="nativeNoticeInstall">Get APK</button><button type="button" id="nativeNoticeDismiss">Already installed / Dismiss</button>';
+            document.body.appendChild(notice);
+            notice.querySelector('#nativeNoticeInstall').onclick = function () { notice.hidden = true; showInstallHelp(); };
+            notice.querySelector('#nativeNoticeDismiss').onclick = function () {
+                notice.hidden = true;
+                try { localStorage.setItem('nativeSharingNoticeDismissed', 'yes'); } catch (_) {}
+            };
+        }
     }
 
     // Register the service worker for PWA installability.
