@@ -925,6 +925,7 @@
                     <button class="btn btn-success" onclick="downloadHTML()">
                         ⬇️ Download HTML (Old)
                     </button>
+                    <button class="btn btn-primary" onclick="shareHTML('old')">📤 Share HTML (Old)</button>
                 </div>
                 <div class="result-buttons" id="resultButtonsNew" style="display: none; margin-top: 8px;">
                     <button class="btn btn-primary" onclick="previewHTMLNew()">
@@ -933,6 +934,7 @@
                     <button class="btn btn-success" onclick="downloadHTMLNew()">
                         ⬇️ Download HTML (New)
                     </button>
+                    <button class="btn btn-primary" onclick="shareHTML('new')">📤 Share HTML (New)</button>
                 </div>
             </div>
         </div>
@@ -1590,6 +1592,14 @@
                 });
 
                 const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.error || 'Could not generate HTML');
+                const [oldHtml, newHtml] = await Promise.all([
+                    unpackGeneratedHTML(data.old_file), unpackGeneratedHTML(data.new_file)
+                ]);
+                window._generatedHTML = {
+                    old: oldHtml ? {name: data.old_filename, html: oldHtml} : null,
+                    new: newHtml ? {name: data.new_filename, html: newHtml} : null
+                };
 
                 loading.style.display = 'none';
                 result.style.display = 'block';
@@ -1631,9 +1641,83 @@
             generateBtn.disabled = false;
         }
 
-        function previewHTML() {
-            window.open('/preview-html?token=' + encodeURIComponent(window._oldToken || ''), '_blank');
+        async function unpackGeneratedHTML(payload) {
+            if (!payload) return '';
+            if (payload.encoding === 'utf8') return payload.data;
+            if (payload.encoding !== 'gzip-base64' || !('DecompressionStream' in window))
+                throw new Error('Update Android System WebView to open this generated HTML.');
+            const binary = atob(payload.data);
+            const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+            return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
         }
+
+        function generatedFile(kind) {
+            const file = window._generatedHTML && window._generatedHTML[kind];
+            if (!file) { alert('Generate the HTML file again before opening it.'); return null; }
+            return new File([file.html], file.name, {type: 'text/html'});
+        }
+
+        function downloadGenerated(kind) {
+            const file = generatedFile(kind);
+            if (!file) return;
+            if (window.MedListNativeShare) {
+                file.arrayBuffer().then(bytes => {
+                    const data = new Uint8Array(bytes);
+                    let encoded = '';
+                    for (let i = 0; i < data.length; i += 8192)
+                        encoded += String.fromCharCode(...data.subarray(i, i + 8192));
+                    window.MedListNativeShare.postMessage(JSON.stringify({action:'save', filename:file.name, data_b64:btoa(encoded)}));
+                }).catch(() => alert('Could not prepare the file. Please try again.'));
+            } else {
+                const url = URL.createObjectURL(file);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = file.name;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+            }
+            _incrementListNo();
+        }
+
+        function previewGenerated(kind) {
+            const file = generatedFile(kind);
+            if (!file) return;
+            let dialog = document.getElementById('generatedPreviewDialog');
+            if (!dialog) {
+                dialog = document.createElement('dialog');
+                dialog.id = 'generatedPreviewDialog';
+                dialog.style.cssText = 'inset:0;margin:auto;width:min(96vw,920px);max-width:none;height:min(92dvh,900px);max-height:none;padding:12px;border:0;border-radius:12px;background:#fff';
+                dialog.innerHTML = '<button type="button" style="padding:10px;margin-bottom:8px" id="closeGeneratedPreview">Close preview</button><iframe title="Generated HTML preview" sandbox="allow-scripts" style="width:100%;height:calc(100% - 55px);border:1px solid #aaa"></iframe>';
+                document.body.appendChild(dialog);
+                dialog.querySelector('#closeGeneratedPreview').onclick = () => dialog.close();
+            }
+            dialog.querySelector('iframe').srcdoc = window._generatedHTML[kind].html;
+            dialog.showModal();
+        }
+
+        async function shareHTML(kind) {
+            const file = generatedFile(kind);
+            if (!file) return;
+            if (window.MedListNativeShare) {
+                const data = new Uint8Array(await file.arrayBuffer());
+                let encoded = '';
+                for (let i = 0; i < data.length; i += 8192)
+                    encoded += String.fromCharCode(...data.subarray(i, i + 8192));
+                window.MedListNativeShare.postMessage(JSON.stringify({action:'share', filename:file.name, data_b64:btoa(encoded)}));
+            } else if (navigator.canShare && navigator.canShare({files:[file]})) {
+                try { await navigator.share({files:[file], title:'MedList HTML'}); }
+                catch (e) { if (e.name !== 'AbortError') alert('Sharing failed. Download the HTML file and share it from Files.'); }
+            } else {
+                alert('Download the HTML file and share it from Files on this device.');
+            }
+        }
+
+        function previewHTML() { previewGenerated('old'); }
+        function previewHTMLNew() { previewGenerated('new'); }
+        function downloadHTML() { downloadGenerated('old'); }
+        function downloadHTMLNew() { downloadGenerated('new'); }
 
         function _incrementListNo() {
             const input = document.getElementById('list_no');
@@ -1645,22 +1729,6 @@
                 localStorage.setItem('last_list_no', next);
                 updateFilenamePreview();
             }
-        }
-
-        function downloadHTML() {
-            if (!window._oldToken) return;
-            window.location.href = '/download-html?token=' + encodeURIComponent(window._oldToken);
-            _incrementListNo();
-        }
-
-        function previewHTMLNew() {
-            window.open('/preview-html-new?token=' + encodeURIComponent(window._newToken || ''), '_blank');
-        }
-
-        function downloadHTMLNew() {
-            if (!window._newToken) return;
-            window.location.href = '/download-html-new?token=' + encodeURIComponent(window._newToken);
-            _incrementListNo();
         }
 
         // Load transferred content from main page if available
@@ -1861,6 +1929,7 @@
         let pendingEdit = null;
         let savingInProgress = false;
         let inlineEditScrollY = 0;
+        let inlineEditCell = null;
 
         // Edit a single cell inline — click any editable cell to edit it
         function editCellInline(cell, fieldType) {
@@ -1877,6 +1946,7 @@
             }
 
             isEditing = true;
+            inlineEditCell = cell;
             inlineEditScrollY = window.scrollY;
             const row = cell.closest('tr');
             const itemData = {
@@ -1885,7 +1955,8 @@
                 tp: row.dataset.tp || '',
                 bonus: row.dataset.bonus || '',
                 tax: row.dataset.tax || '',
-                isExtended: row.dataset.extended === '1'
+                isExtended: row.dataset.extended === '1',
+                lineIndex: Number(row.dataset.lineIndex)
             };
             const originalValue = itemData[fieldType] || '';
 
@@ -1914,7 +1985,8 @@
                     saveCellEdit(fieldType, itemData, v);
                 } else if (e.key === 'Escape') {
                     isEditing = false; pendingEdit = null; savingInProgress = false;
-                    updatePreview({ pageScrollY: inlineEditScrollY });
+                    if (inlineEditCell) inlineEditCell.textContent = originalValue;
+                    inlineEditCell = null;
                 }
             });
 
@@ -1938,7 +2010,8 @@
             if (fieldType === 'name' && !newValue) {
                 alert('Item name cannot be empty');
                 savingInProgress = false;
-                updatePreview({ pageScrollY: inlineEditScrollY });
+                if (inlineEditCell) inlineEditCell.textContent = itemData.name;
+                inlineEditCell = null;
                 checkPendingEdit();
                 return;
             }
@@ -1946,38 +2019,26 @@
             const textarea = document.getElementById('editorTextarea');
             const lines = textarea.value.split('\n');
 
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (!line.includes('-----')) continue;
-
-                // Parse to find matching name
-                let parsedName = '';
-                if (line.includes('|')) {
-                    const pp = line.split('|');
-                    const mid = pp[0] || '';
-                    const di = mid.indexOf('-----');
-                    parsedName = di >= 0 ? mid.substring(0, di).trim() : mid.trim();
-                } else {
-                    parsedName = line.split('-----')[0].trim();
-                }
-                if (parsedName !== itemData.name) continue;
-
-                // Apply edit
+            // Match the exact source line, including when two items share a name.
+            const i = itemData.lineIndex;
+            if (Number.isInteger(i) && i >= 0 && i < lines.length) {
                 const u = Object.assign({}, itemData);
                 u[fieldType] = newValue;
-
-                // Auto-upgrade to extended if bonus or tp is now set
-                if (u.isExtended || u.bonus || u.tp) {
-                    lines[i] = `${u.name}----- ${u.value}|${u.tp}|${u.bonus}|${u.tax}`;
-                } else {
-                    lines[i] = `${u.name}----- ${u.value}`;
-                }
-                break;
+                lines[i] = (u.isExtended || u.bonus || u.tp)
+                    ? `${u.name}----- ${u.value}|${u.tp}|${u.bonus}|${u.tax}`
+                    : `${u.name}----- ${u.value}`;
             }
 
             textarea.value = lines.join('\n');
             updateItemCount();
-            updatePreview({ pageScrollY: inlineEditScrollY });
+            // Preserve the edited row and its scroll position. Rebuilding all
+            // rows while Android closes its keyboard used to jump hundreds of rows.
+            if (inlineEditCell) {
+                const row = inlineEditCell.closest('tr');
+                inlineEditCell.textContent = newValue;
+                if (row) row.dataset[fieldType] = newValue;
+                inlineEditCell = null;
+            }
             savingInProgress = false;
 
             checkPendingEdit();
@@ -2015,9 +2076,19 @@
 
             lastDeletedItem = { lineIndex, line: lines[lineIndex] };
             lines.splice(lineIndex, 1);
-            textarea.value = lines.join('\n').replace(/^\s*[\r\n]+/gm, '');
+            textarea.value = lines.join('\n');
             updateItemCount();
-            updatePreview();
+            const section = row.previousElementSibling;
+            row.remove();
+            const remaining = document.querySelectorAll('#previewTableBody tr.item-row');
+            remaining.forEach((item, number) => {
+                if (Number(item.dataset.lineIndex) > lineIndex) item.dataset.lineIndex = String(Number(item.dataset.lineIndex) - 1);
+                const num = item.querySelector('.col-num');
+                if (num) num.textContent = String(number + 1);
+            });
+            if (section && !section.classList.contains('item-row') &&
+                (!section.nextElementSibling || !section.nextElementSibling.classList.contains('item-row')))
+                section.remove();
             showUndoDelete(itemName);
         }
 
