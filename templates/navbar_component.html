@@ -4,7 +4,7 @@
 <style>
     #installBtn[hidden], #nativeUpgradeNotice[hidden] { display: none !important; }
     @media (display-mode: standalone), (display-mode: fullscreen) {
-        #installBtn { display: none !important; }
+        #installBtn, #nativeUpgradeNotice { display: none !important; }
     }
     #installChoices {
         position: fixed; inset: 0; margin: auto; box-sizing: border-box;
@@ -661,10 +661,16 @@
     }
     function updateInstallVisibility() {
         if (installBtn) installBtn.hidden = isInstalledMedListWindow();
+        const notice = document.getElementById('nativeUpgradeNotice');
+        if (notice && isInstalledMedListWindow()) notice.hidden = true;
     }
     updateInstallVisibility();
     standaloneDisplay.addEventListener('change', updateInstallVisibility);
-    window.addEventListener('appinstalled', () => { if (installBtn) installBtn.hidden = true; });
+    window.addEventListener('appinstalled', () => {
+        if (installBtn) installBtn.hidden = true;
+        const notice = document.getElementById('nativeUpgradeNotice');
+        if (notice) notice.hidden = true;
+    });
 
     function showInstallHelp() {
         let dialog = document.getElementById('installChoices');
@@ -694,7 +700,7 @@
 
     // Browsers cannot reliably detect this sideloaded APK. Offer a suggestion,
     // never treat an unknown installation state as proof that it is absent.
-    if (/Android/.test(navigator.userAgent) && !isNativeMedList()) {
+    if (/Android/.test(navigator.userAgent) && !isInstalledMedListWindow()) {
         let dismissed = false;
         try { dismissed = localStorage.getItem('nativeSharingNoticeDismissed') === 'yes'; } catch (_) {}
         if (!dismissed) {
@@ -703,11 +709,13 @@
             notice.setAttribute('aria-label', 'Android file sharing option');
             notice.innerHTML = '<strong>Trouble sharing files?</strong><p>Try the new MedList Native APK for Android file sharing. After testing it, you can remove the old PWA.</p><button type="button" id="nativeNoticeInstall">Get APK</button><button type="button" id="nativeNoticeDismiss">Already installed / Dismiss</button>';
             document.body.appendChild(notice);
-            notice.querySelector('#nativeNoticeInstall').onclick = function () { notice.hidden = true; showInstallHelp(); };
-            notice.querySelector('#nativeNoticeDismiss').onclick = function () {
+            function dismissNativeNotice() {
                 notice.hidden = true;
                 try { localStorage.setItem('nativeSharingNoticeDismissed', 'yes'); } catch (_) {}
-            };
+            }
+            notice.querySelector('#nativeNoticeInstall').onclick = function () { dismissNativeNotice(); showInstallHelp(); };
+            notice.querySelector('#nativeNoticeDismiss').onclick = dismissNativeNotice;
+            setTimeout(dismissNativeNotice, 4000);
         }
     }
 
