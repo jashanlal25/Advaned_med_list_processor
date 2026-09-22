@@ -591,7 +591,7 @@
         deferredPrompt = e;
     });
 
-    function showInstallHelp() {
+    function installPWA() {
         if (deferredPrompt) {
             // Auto install available
             deferredPrompt.prompt();
@@ -615,15 +615,24 @@
         }
     }
 
-    if (installBtn) {
-        window.addEventListener('appinstalled', () => {
-            installBtn.style.display = 'none';
-        });
-
-        // Hide install button if already installed (standalone mode)
-        if (window.matchMedia('(display-mode: standalone)').matches) {
-            installBtn.style.display = 'none';
+    function showInstallHelp() {
+        let dialog = document.getElementById('installChoices');
+        if (!dialog) {
+            dialog = document.createElement('dialog');
+            dialog.id = 'installChoices';
+            dialog.setAttribute('aria-labelledby', 'installChoicesTitle');
+            dialog.style.cssText = 'max-width:360px;width:calc(100% - 48px);padding:24px;border:1px solid #667eea;border-radius:18px;background:var(--bg-primary,#162238);color:var(--text-primary,#fff);box-shadow:0 12px 48px #0008';
+            dialog.innerHTML = '<h2 id="installChoicesTitle" style="margin-top:0">Install MedList</h2>' +
+                '<button type="button" id="choosePWA" style="display:block;width:100%;padding:15px;margin:12px 0;border:0;border-radius:10px;background:#167b60;color:white;font-size:16px">Install PWA</button>' +
+                '<p style="font-size:14px">Use the browser-based app.</p>' +
+                '<a href="https://github.com/jashanlal25/Advaned_med_list_processor/releases/download/native-latest/MedList-Native.apk" style="display:block;padding:15px;margin:12px 0;border-radius:10px;background:#6654bf;color:white;text-align:center;text-decoration:none">Download Android APK</a>' +
+                '<p style="font-size:14px">Android 8 or newer · Test version with native file sharing.</p>' +
+                '<button type="button" id="closeInstallChoices" style="padding:10px 16px">Close</button>';
+            document.body.appendChild(dialog);
+            dialog.querySelector('#choosePWA').onclick = function () { dialog.close(); installPWA(); };
+            dialog.querySelector('#closeInstallChoices').onclick = function () { dialog.close(); };
         }
+        dialog.showModal();
     }
 
     // Register the service worker for PWA installability.
