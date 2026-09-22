@@ -67,11 +67,12 @@ public final class MainActivity extends Activity {
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+        settings.setUserAgentString(settings.getUserAgentString() + " MedListNative/1.2");
         // The existing website gates its persistent file batch on standalone mode.
         // Set this before page scripts run, only on the exact MedList origin.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web,
-                "Object.defineProperty(navigator,'standalone',{get:()=>true});",
+                "window.__MEDLIST_NATIVE__=true;Object.defineProperty(navigator,'standalone',{get:()=>true});",
                 Collections.singleton(ShareUpload.ORIGIN));
         } else {
             new AlertDialog.Builder(this).setTitle("Update Android System WebView")
