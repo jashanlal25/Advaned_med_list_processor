@@ -107,7 +107,7 @@
         window.addEventListener('scroll', () => { clearTimeout(scrollTimer); scrollTimer = setTimeout(save, 150); }, {passive:true});
         byId('previewContent').addEventListener('scroll', save, {passive:true});
     });
-    window.addEventListener('load', () => setTimeout(async () => {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(async () => {
         if (!byId('editorTextarea')) return;
         let local = null, stored = {};
         try { local = JSON.parse(localStorage.getItem(KEY)); } catch (_) {}
