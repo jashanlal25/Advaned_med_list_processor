@@ -257,6 +257,39 @@
 
 <script>
 (function(){
+  // Keep the launcher at its resting position while a page field opens the
+  // keyboard. Bottom anchoring alone lifts it over the row being edited.
+  var bubble = document.getElementById('cb-bubble');
+  var bubbleAnchor = null;
+  function isPageEditor(el) {
+    return el && !el.closest('#cb-panel') &&
+      (el.isContentEditable || el.matches('textarea, input:not([type]), input[type="text"], input[type="number"], input[type="search"], input[type="email"], input[type="tel"], input[type="url"], input[type="password"]'));
+  }
+  function releaseBubbleAnchor() {
+    bubble.style.removeProperty('top');
+    bubble.style.removeProperty('bottom');
+    bubbleAnchor = null;
+  }
+  function updateBubbleAnchor() {
+    if (!bubbleAnchor) return;
+    if (document.getElementById('cb-panel').classList.contains('open') ||
+        (!isPageEditor(document.activeElement) && window.innerHeight >= bubbleAnchor.height - 80)) {
+      releaseBubbleAnchor();
+    }
+  }
+  document.addEventListener('focusin', function(e) {
+    if (isPageEditor(e.target) && !bubbleAnchor &&
+        !document.getElementById('cb-panel').classList.contains('open')) {
+      bubbleAnchor = {top: bubble.getBoundingClientRect().top, height: window.innerHeight};
+      bubble.style.top = bubbleAnchor.top + 'px';
+      bubble.style.bottom = 'auto';
+    }
+    updateBubbleAnchor();
+  });
+  document.addEventListener('focusout', function() { setTimeout(updateBubbleAnchor, 350); });
+  window.addEventListener('resize', updateBubbleAnchor);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', updateBubbleAnchor);
+
   var undoStack   = [];
   var unreadCount = 0;
   var GROK_KEY    = 'cb_groq_key';
