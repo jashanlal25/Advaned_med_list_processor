@@ -70,6 +70,9 @@ app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 from chatbot_bp import chatbot_bp
 app.register_blueprint(chatbot_bp)
 
+from android_download import android_download
+app.register_blueprint(android_download)
+
 
 @app.after_request
 def add_pwa_headers(response):
