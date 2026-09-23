@@ -278,6 +278,7 @@
     }
   }
   document.addEventListener('focusin', function(e) {
+    if (window.__MEDLIST_NATIVE__ !== true && !/MedListNative\//.test(navigator.userAgent)) return;
     if (isPageEditor(e.target) && !bubbleAnchor &&
         !document.getElementById('cb-panel').classList.contains('open')) {
       bubbleAnchor = {top: bubble.getBoundingClientRect().top, height: window.innerHeight};

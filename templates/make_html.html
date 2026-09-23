@@ -1946,6 +1946,7 @@
             if (Math.abs(delta) > 1) window.scrollBy({top: delta, behavior: 'instant'});
         }
         function scheduleInlineEditVisibility() {
+            if (window.__MEDLIST_NATIVE__ !== true && !/MedListNative\//.test(navigator.userAgent)) return;
             clearTimeout(inlineEditViewportTimer);
             inlineEditViewportTimer = setTimeout(keepInlineEditVisible, 120);
         }
