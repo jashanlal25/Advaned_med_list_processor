@@ -1928,8 +1928,31 @@
         let isEditing = false;
         let pendingEdit = null;
         let savingInProgress = false;
-        let inlineEditScrollY = 0;
         let inlineEditCell = null;
+        let inlineEditViewportTimer;
+
+        // Wait for keyboard resizing to settle, then move only as far as needed.
+        // Do nothing when it closes: restoring an old page offset causes jumps.
+        function keepInlineEditVisible() {
+            const input = inlineEditCell && inlineEditCell.querySelector('input');
+            if (!isEditing || !input || document.activeElement !== input) return;
+            input.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'instant'});
+            const viewport = window.visualViewport;
+            const top = (viewport ? viewport.offsetTop : 0) + 80;
+            const bottom = (viewport ? viewport.offsetTop + viewport.height : window.innerHeight) - 20;
+            const rect = input.getBoundingClientRect();
+            const delta = rect.bottom > bottom ? rect.bottom - bottom :
+                (rect.top < top ? rect.top - top : 0);
+            if (Math.abs(delta) > 1) window.scrollBy({top: delta, behavior: 'instant'});
+        }
+        function scheduleInlineEditVisibility() {
+            clearTimeout(inlineEditViewportTimer);
+            inlineEditViewportTimer = setTimeout(keepInlineEditVisible, 120);
+        }
+        window.addEventListener('resize', scheduleInlineEditVisibility);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', scheduleInlineEditVisibility);
+        }
 
         // Edit a single cell inline — click any editable cell to edit it
         function editCellInline(cell, fieldType) {
@@ -1947,7 +1970,6 @@
 
             isEditing = true;
             inlineEditCell = cell;
-            inlineEditScrollY = window.scrollY;
             const row = cell.closest('tr');
             const itemData = {
                 name: row.dataset.name || '',
@@ -1964,14 +1986,15 @@
             cell.innerHTML = `<input type="text" class="inline-edit-input"${nameAttrs} value="${escapeHtml(originalValue)}">`;
 
             const input = cell.querySelector('input');
+            input.addEventListener('click', e => e.stopPropagation());
             if (fieldType === 'name') {
-                input.addEventListener('click', e => e.stopPropagation());
                 input.focus({ preventScroll: true });
                 input.setSelectionRange(input.value.length, input.value.length);
             } else {
                 input.focus({ preventScroll: true });
                 input.select();
             }
+            scheduleInlineEditVisibility();
 
             input.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
@@ -1997,7 +2020,10 @@
                     else if (/^\d+\.\d+$/.test(cv) && !cv.endsWith('%')) input.value = cv + '%';
                 }
                 setTimeout(() => {
-                    if (isEditing) { savingInProgress = true; saveCellEdit(fieldType, itemData, input.value.trim()); }
+                    if (isEditing && inlineEditCell === cell && document.activeElement !== input) {
+                        savingInProgress = true;
+                        saveCellEdit(fieldType, itemData, input.value.trim());
+                    }
                 }, 50);
             });
         }
