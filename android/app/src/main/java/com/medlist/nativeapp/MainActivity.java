@@ -81,13 +81,19 @@ public final class MainActivity extends Activity {
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " MedListNative/1.4");
+        settings.setUserAgentString(settings.getUserAgentString() + " MedListNative/1.5");
         // The existing website gates its persistent file batch on standalone mode.
         // Set this before page scripts run, only on the exact MedList origin.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web,
                 "window.__MEDLIST_NATIVE__=true;Object.defineProperty(navigator,'standalone',{get:()=>true});",
                 Collections.singleton(ShareUpload.ORIGIN));
+            try (InputStream input = getAssets().open("editor-recovery.js")) {
+                ByteArrayOutputStream script = new ByteArrayOutputStream();
+                ShareUpload.copyLimited(input, script, 1024 * 1024);
+                WebViewCompat.addDocumentStartJavaScript(web, script.toString("UTF-8"),
+                    Collections.singleton(ShareUpload.ORIGIN));
+            } catch (IOException e) { throw new IllegalStateException("Missing editor recovery", e); }
         } else {
             new AlertDialog.Builder(this).setTitle("Update Android System WebView")
                 .setMessage("Update Android System WebView in the Play Store to enable shared-file processing in this app.")
@@ -117,6 +123,8 @@ public final class MainActivity extends Activity {
             }
             @Override public void onPageFinished(WebView view, String url) {
                 if (!busy && retry.getVisibility() != View.VISIBLE) toolbar.setVisibility(View.GONE);
+                if (ShareUpload.isTrusted(url) && !url.contains("/native-share"))
+                    getPreferences(MODE_PRIVATE).edit().putString("lastPage", url.split("\\?", 2)[0]).apply();
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame() && !busy) showError("Page could not load. Check your connection.");
@@ -143,17 +151,30 @@ public final class MainActivity extends Activity {
             if (url.startsWith("blob:" + ShareUpload.ORIGIN + "/")) downloadBlob(url, name, mime);
             else if (ShareUpload.isTrusted(url)) downloadFile(url, name, mime);
         });
-        // Saved WebView state avoids reposting a share when Android recreates this activity.
-        if (state != null && web.restoreState(state) != null) {
+        // Restore the staged output before Android delivers the document-picker result.
+        if (state != null) {
+            String download = state.getString("pendingDownload");
+            if (download != null && download.equals(new File(download).getName())) {
+                File staged = new File(getCacheDir(), download);
+                if (staged.isFile()) pendingDownload = staged;
+            }
+        }
+        // Restore only the page reference; the bundled script restores the durable draft.
+        if (state != null) {
+            String page = state.getString("page", getPreferences(MODE_PRIVATE).getString("lastPage", ShareUpload.ORIGIN + "/"));
+            web.loadUrl(ShareUpload.isTrusted(page) && !page.contains("/native-share") ? page : ShareUpload.ORIGIN + "/");
             String cached = state.getString("pendingShare");
             if (cached != null) {
                 File file = new File(getCacheDir(), cached);
                 if (file.exists()) { pendingShare = file; pendingName = state.getString("pendingName", "shared_document");
-                    showError("Tap Retry to reopen the saved attachment."); }
+                    openPending(); }
             }
         } else {
             if (IncomingShare.isShare(getIntent())) handleShare(getIntent());
-            else web.loadUrl(ShareUpload.ORIGIN + "/");
+            else {
+                String last = getPreferences(MODE_PRIVATE).getString("lastPage", ShareUpload.ORIGIN + "/");
+                web.loadUrl(ShareUpload.isTrusted(last) ? last : ShareUpload.ORIGIN + "/");
+            }
         }
         // Cache is private and excluded from backups; expire abandoned transfer files.
         File[] old = getCacheDir().listFiles();
@@ -427,8 +448,22 @@ public final class MainActivity extends Activity {
     private void toast(String message) { Toast.makeText(this, message, Toast.LENGTH_LONG).show(); }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
-        web.saveState(state);
-        if (pendingShare != null && (busy || (ShareUpload.ORIGIN + "/native-share").equals(web.getUrl()))) { state.putString("pendingShare", pendingShare.getName()); state.putString("pendingName", pendingName); }
+        checkpointDraft();
+        // Never parcel WebView history: local shared HTML can exceed Android's
+        // Binder limit and crash the Activity as soon as a picker/app opens.
+        String page = web.getUrl();
+        if (ShareUpload.isTrusted(page)) state.putString("page", page);
+        if (pendingDownload != null) state.putString("pendingDownload", pendingDownload.getName());
+        if (pendingShare != null && (ShareUpload.ORIGIN + "/native-share").equals(web.getUrl())) { state.putString("pendingShare", pendingShare.getName()); state.putString("pendingName", pendingName); }
+    }
+    private void checkpointDraft() {
+        if (web != null && ShareUpload.isTrusted(web.getUrl()))
+            web.evaluateJavascript("window.__medlistSaveDraft && window.__medlistSaveDraft()", null);
+    }
+    @Override protected void onPause() {
+        checkpointDraft();
+        CookieManager.getInstance().flush();
+        super.onPause();
     }
     @SuppressWarnings("deprecation")
     @Override public void onBackPressed() {
@@ -442,3 +477,4 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 }
+
