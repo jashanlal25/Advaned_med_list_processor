@@ -86,6 +86,7 @@
 #cb-provider-settings { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:7px 10px; background:#fff; color:#1e293b; }
 #cb-provider-settings select, #cb-provider-settings button { font:inherit; font-size:11px; padding:4px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#1e293b; }
 #cb-usage-status { width:100%; color:#334155; }
+#cb-model-tier { display:none; }
  /* ── Messages ── */
 #cb-messages {
   flex: 1; min-height: 0; overflow-y: auto; padding: 14px 12px;
@@ -222,6 +223,10 @@
       <option value="openai">OpenAI API</option>
       <option value="openrouter">OpenRouter</option>
     </select>
+    <select id="cb-model-tier" aria-label="OpenRouter model tier" title="Choose OpenRouter free or paid model">
+      <option value="free">Free models</option>
+      <option value="paid">Paid GPT model</option>
+    </select>
     <button type="button" onclick="cbCheckUsage()">Check usage</button>
     <small id="cb-usage-status" role="status"></small>
   </div>
@@ -319,6 +324,7 @@
     var p = cbProvider();
     localStorage.setItem(CB_PROVIDER_KEY, p);
     document.getElementById('cb-groq-badge').textContent = p === 'openrouter' ? 'ROUTER' : p.toUpperCase();
+    document.getElementById('cb-model-tier').style.display = p === 'openrouter' ? 'inline-block' : 'none';
     document.getElementById('cb-usage-status').textContent = '';
     if(document.getElementById('cb-grok-toggle').checked && !cbKey()){
       cbSetMode('local');
@@ -420,7 +426,7 @@
     fetch('/chatbot/grok', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({provider:provider, apiKey:apiKey,
-        rawPayload:{messages:[{role:'user',content:'Reply with only: ok'}],max_tokens:5}})
+        modelTier:document.getElementById('cb-model-tier').value, rawPayload:{messages:[{role:'user',content:'Reply with only: ok'}],max_tokens:5}})
     }).then(function(r){return r.json();}).then(function(data){
       if(data.error){
         cbSetMode('local');
@@ -444,9 +450,13 @@
       if(data.error){status.textContent=data.error;return;}
       if(!data.available){status.textContent=data.message;return;}
       var used=Number(data.usage||0).toFixed(2);
-      status.textContent = data.limit_remaining == null
+      var credit = data.limit_remaining == null
         ? 'Used: $'+used+'. No key spending limit set; account credit balance is unavailable.'
-        : 'Used: $'+used+' · Remaining key limit: $'+Number(data.limit_remaining).toFixed(2);
+        : 'Used: $'+used+' · Remaining paid key limit: $'+Number(data.limit_remaining).toFixed(2);
+      var free = data.free_model_daily_requests;
+      status.textContent = credit + (free && free.remaining != null
+        ? ' Free requests left today: '+free.remaining+' of '+free.limit+'.'
+        : ' Free request balance is unavailable.');
     }).catch(function(){status.textContent='Usage check failed. Try again.';});
   }
   window.cbCheckUsage=cbCheckUsage;
@@ -824,7 +834,7 @@
     fetch('/chatbot/grok', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({provider:provider, apiKey:apiKey, command:cmd, items:items, rawPayload:payload})
+      body: JSON.stringify({provider:provider, modelTier:document.getElementById('cb-model-tier').value, apiKey:apiKey, command:cmd, items:items, rawPayload:payload})
     })
     .then(function(r){return r.json();})
     .then(function(data){
