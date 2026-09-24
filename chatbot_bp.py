@@ -96,7 +96,9 @@ def grok_chat():
         if exc.code in (401, 403, 429):
             return jsonify({'error': _error_message(exc), 'code': exc.code}), exc.code
         return jsonify({'error': _error_message(exc), 'code': exc.code}), 502
-    except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError, TypeError):
+    except TimeoutError:
+        return jsonify({'error': 'AI provider did not answer within 25 seconds. Please try again.'}), 504
+    except (urllib.error.URLError, ValueError, KeyError, IndexError, TypeError):
         return jsonify({'error': 'Could not complete the provider request'}), 502
 
 
