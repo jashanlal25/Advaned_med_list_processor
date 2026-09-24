@@ -8,7 +8,7 @@ chatbot_bp = Blueprint('chatbot', __name__)
 PROVIDERS = {
     'groq': ('https://api.groq.com/openai/v1/chat/completions', 'llama-3.1-8b-instant'),
     'openai': ('https://api.openai.com/v1/chat/completions', 'gpt-4o-mini'),
-    'openrouter': ('https://openrouter.ai/api/v1/chat/completions', 'openai/gpt-4o-mini'),
+    'openrouter': ('https://openrouter.ai/api/v1/chat/completions', 'openrouter/free'),
 }
 
 SYSTEM_PROMPT = (
@@ -76,7 +76,7 @@ def grok_chat():
 
     # The application chooses the provider's model. A client cannot submit an
     # unexpectedly expensive model in rawPayload.
-    payload['model'] = PROVIDERS[provider][1]
+    payload['model'] = ('openai/gpt-4o-mini' if provider == 'openrouter' and data.get('modelTier') == 'paid' else PROVIDERS[provider][1])
     payload['max_tokens'] = min(4000, max(1, int(payload.get('max_tokens', 1200))))
     req = urllib.request.Request(
         PROVIDERS[provider][0],
@@ -128,6 +128,7 @@ def chatbot_usage():
             'usage': info.get('usage'),
             'limit': info.get('limit'),
             'limit_remaining': info.get('limit_remaining'),
+            'free_model_daily_requests': info.get('free_model_daily_requests'),
         })
     except urllib.error.HTTPError as exc:
         return jsonify({'error': _error_message(exc), 'code': exc.code}), exc.code if exc.code in (401, 403, 429) else 502
