@@ -83,7 +83,10 @@
 }
 #cb-close:hover { background: rgba(255,255,255,.25); }
 
-/* ── Messages ── */
+#cb-provider-settings { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:7px 10px; background:#fff; color:#1e293b; }
+#cb-provider-settings select, #cb-provider-settings button { font:inherit; font-size:11px; padding:4px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#1e293b; }
+#cb-usage-status { width:100%; color:#334155; }
+ /* ── Messages ── */
 #cb-messages {
   flex: 1; min-height: 0; overflow-y: auto; padding: 14px 12px;
   display: flex; flex-direction: column; gap: 10px;
@@ -212,6 +215,16 @@
     <button id="cb-close" onclick="cbToggle()">✕</button>
   </div>
 
+  <div id="cb-provider-settings">
+    <label for="cb-provider">AI provider</label>
+    <select id="cb-provider" onchange="cbProviderChanged()">
+      <option value="groq">Groq</option>
+      <option value="openai">OpenAI (ChatGPT API)</option>
+      <option value="openrouter">OpenRouter</option>
+    </select>
+    <button type="button" onclick="cbCheckUsage()">Check usage</button>
+    <small id="cb-usage-status" role="status"></small>
+  </div>
   <div id="cb-messages">
     <div class="cb-msg bot">Hi! I can edit your medicine list. Try a quick command below or describe what you need.</div>
   </div>
@@ -227,7 +240,7 @@
     <span class="cb-hint" onclick="cbQuick('sort')">sort A-Z</span>
     <span class="cb-hint" onclick="cbQuick('stats')">stats</span>
     <span class="cb-hint" onclick="cbQuick('undo')">undo</span>
-    <span class="cb-hint cb-hint-key" onclick="cbChangeKey()" title="Change or update your Groq API key">🔑 change key</span>
+    <span class="cb-hint cb-hint-key" onclick="cbChangeKey()" title="Change or update your selected provider API key">🔑 change key</span>
   </div>
   <script>
   // Replace hints with search-specific ones on the search page
@@ -237,7 +250,7 @@
     hints.innerHTML =
       '<span class="cb-hint" onclick="cbQuick(\'Azomax, Caflam\')">search example</span>' +
       '<span class="cb-hint" onclick="cbQuick(\'search for \')">search for…</span>' +
-      '<span class="cb-hint cb-hint-key" onclick="cbChangeKey()" title="Groq API key">🔑 key</span>';
+      '<span class="cb-hint cb-hint-key" onclick="cbChangeKey()" title="Selected provider API key">🔑 key</span>';
     // Show welcome message
     addMsg('👋 Upload your list files above, then type any medicine name(s) here to search — separate multiple names with commas.', 'bot');
   })();
@@ -294,6 +307,27 @@
   var undoStack   = [];
   var unreadCount = 0;
   var GROK_KEY    = 'cb_groq_key';
+  var CB_PROVIDER_KEY = 'cb_provider';
+  var CB_PROVIDERS = {groq:'Groq', openai:'OpenAI', openrouter:'OpenRouter'};
+  function cbProvider(){
+    var p = document.getElementById('cb-provider').value;
+    return CB_PROVIDERS[p] ? p : 'groq';
+  }
+  function cbKeyName(){ return cbProvider() === 'groq' ? GROK_KEY : 'cb_key_' + cbProvider(); }
+  function cbKey(){ return localStorage.getItem(cbKeyName()) || ''; }
+  function cbProviderChanged(){
+    var p = cbProvider();
+    localStorage.setItem(CB_PROVIDER_KEY, p);
+    document.getElementById('cb-groq-badge').textContent = p === 'openrouter' ? 'ROUTER' : p.toUpperCase();
+    document.getElementById('cb-usage-status').textContent = '';
+    if(document.getElementById('cb-grok-toggle').checked && !cbKey()){
+      cbSetMode('local');
+      addMsg('Enter your '+CB_PROVIDERS[p]+' key to enable AI.', 'bot');
+    }
+  }
+  window.cbProviderChanged = cbProviderChanged;
+  document.getElementById('cb-provider').value = CB_PROVIDERS[localStorage.getItem(CB_PROVIDER_KEY)] ? localStorage.getItem(CB_PROVIDER_KEY) : 'groq';
+  cbProviderChanged();
   var pendingFile = null;   // {type:'image'|'text', data:..., name:...}
 
   /* ── Panel toggle ── */
@@ -320,21 +354,16 @@
     puterBadge.classList.toggle('active-puter', mode === 'puter');
   }
 
-  /* ── Groq toggle ── */
+  /* ── Keyed provider toggle ── */
   function cbGrokToggled(){
-    var on = document.getElementById('cb-grok-toggle').checked;
-    if(on){
-      // Turn off Puter first
-      cbSetMode('local');
-      document.getElementById('cb-grok-toggle').checked = true;
-      document.getElementById('cb-groq-badge').classList.add('active-groq');
-      var key = localStorage.getItem(GROK_KEY) || '';
-      if(!key){
-        key = prompt('Enter your Groq API key (free at console.groq.com):\n(Stored only in this browser — never sent anywhere except api.groq.com)');
-        if(!key){ cbSetMode('local'); return; }
-        localStorage.setItem(GROK_KEY, key.trim());
+    if(document.getElementById('cb-grok-toggle').checked){
+      if(!cbKey()){
+        cbSetMode('local');
+        cbChangeKey();
+        if(!cbKey()) return;
       }
-      addMsg('🟢 <b>Groq AI ON</b> — free Llama 3.3 active. Natural language commands ready!', 'bot');
+      cbSetMode('groq');
+      addMsg('🟢 <b>'+CB_PROVIDERS[cbProvider()]+' AI ON</b> — ready for commands.', 'bot');
     } else {
       cbSetMode('local');
       addMsg('⚪ Back to built-in rule engine.', 'bot');
@@ -373,70 +402,54 @@
   }
   window.cbPuterToggled = cbPuterToggled;
 
-  /* ── Change / update API key ── */
+  /* ── API key and usage ── */
   function cbChangeKey(){
-    var current = localStorage.getItem(GROK_KEY) || '';
-    var masked  = current ? '…' + current.slice(-6) : '(none saved)';
-    var key = prompt(
-      'Current key: ' + masked + '\n\n' +
-      'Enter a new Groq API key, or leave blank to keep current.\n' +
-      'Get a free key at: console.groq.com → API Keys'
-    );
-    if(key === null) return; // cancelled
-    if(!key.trim()){
-      addMsg('No change — kept existing key.', 'bot');
-      return;
-    }
-    localStorage.setItem(GROK_KEY, key.trim());
-    addMsg('🔑 Key saved. Checking if Groq is working…', 'bot');
+    var current = cbKey();
+    var key = prompt(CB_PROVIDERS[cbProvider()]+' API key (saved on this device):\\nCurrent: '+
+      (current ? '…'+current.slice(-6) : 'none')+'\\nEnter a new key, or leave blank to keep this one.');
+    if(key === null) return;
+    if(!key.trim()) return;
+    localStorage.setItem(cbKeyName(), key.trim());
+    addMsg('🔑 Key saved for '+CB_PROVIDERS[cbProvider()]+'. Checking connection…', 'bot');
     cbTestKey(key.trim());
   }
   window.cbChangeKey = cbChangeKey;
 
-  /* ── Test key with a minimal ping ── */
   function cbTestKey(apiKey){
-    var payload = {
-      model: 'llama-3.1-8b-instant',
-      messages: [{role:'user', content:'reply with only: ok'}],
-      max_tokens: 5, temperature: 0
-    };
+    var provider = cbProvider();
     fetch('/chatbot/grok', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({apiKey: apiKey, rawPayload: payload})
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(data){
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({provider:provider, apiKey:apiKey,
+        rawPayload:{messages:[{role:'user',content:'Reply with only: ok'}],max_tokens:5}})
+    }).then(function(r){return r.json();}).then(function(data){
       if(data.error){
-        if(/401|403|invalid.*key/i.test(data.error)){
-          // Don't clear key on test — let user correct it
-          cbSetMode('local');
-          // Show actual Groq error detail
-          var detail = data.error.replace(/^401:\s*/,'');
-          addMsg(
-            '❌ <b>Groq rejected this key</b><br>' +
-            '<small style="color:#6b7280">Groq says: ' + detail + '</small><br><br>' +
-            '<b>Common reasons:</b><br>' +
-            '• Key copied incorrectly (missing characters)<br>' +
-            '• Key was deleted in Groq console<br>' +
-            '• Account not verified yet<br><br>' +
-            '🔑 Get a key at: <a href="https://console.groq.com" target="_blank" style="color:#b91c1c;font-weight:600">console.groq.com</a> → API Keys → Create<br><br>' +
-            '<span style="cursor:pointer;color:#1d4ed8;text-decoration:underline;font-weight:600" onclick="cbChangeKey()">→ Try a different key</span>',
-            'error'
-          );
-        } else if(/429|rate.?limit/i.test(data.error)){
-          addMsg('⚠️ Key saved but <b>rate limit active right now</b> — Groq is working, just wait ~60 sec before sending commands.', 'bot');
-        } else {
-          addMsg('⚠️ Key saved but Groq returned: <code>' + data.error + '</code>', 'error');
-        }
+        cbSetMode('local');
+        addMsg('⚠️ '+CB_PROVIDERS[provider]+' connection failed: '+escapeHtmlStr(data.error)+
+          ' <span style="cursor:pointer;text-decoration:underline" onclick="cbChangeKey()">Change key</span>', 'error');
       } else {
-        addMsg('✅ <b>Groq is working!</b> Key is valid and responding. You\'re good to go.', 'bot');
+        cbSetMode('groq');
+        addMsg('✅ '+CB_PROVIDERS[provider]+' is responding.', 'bot');
       }
-    })
-    .catch(function(err){
-      addMsg('⚠️ Key saved but could not reach Groq — check your internet connection. (' + err.message + ')', 'error');
-    });
+    }).catch(function(){addMsg('Could not reach the AI provider.', 'error');});
   }
+
+  function cbCheckUsage(){
+    var provider=cbProvider(), status=document.getElementById('cb-usage-status');
+    if(!cbKey()){ status.textContent='Save an API key first.'; return; }
+    status.textContent='Checking…';
+    fetch('/chatbot/usage', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({provider:provider,apiKey:cbKey()})
+    }).then(function(r){return r.json();}).then(function(data){
+      if(data.error){status.textContent=data.error;return;}
+      if(!data.available){status.textContent=data.message;return;}
+      var used=Number(data.usage||0).toFixed(2);
+      status.textContent = data.limit_remaining == null
+        ? 'Used: $'+used+'. No key spending limit set; account credit balance is unavailable.'
+        : 'Used: $'+used+' · Remaining key limit: $'+Number(data.limit_remaining).toFixed(2);
+    }).catch(function(){status.textContent='Usage check failed. Try again.';});
+  }
+  window.cbCheckUsage=cbCheckUsage;
 
   /* ── File attach ── */
   function cbFileSelected(input){
@@ -711,9 +724,9 @@
         '• <code>show duplicates</code><br>' +
         '• <code>show decimal discount</code><br>' +
         '• <code>undo</code><br><br>' +
-        '<i>Turn on Groq AI (free) for natural language commands + file analysis.</i>';
+        '<i>Turn on an AI provider for natural language commands + text file analysis.</i>';
     }
-    return 'Command not recognized. Type <code>help</code> for all commands, or enable Groq AI for free-text questions.';
+    return 'Command not recognized. Type <code>help</code> for all commands, or enable an AI provider for free-text questions.';
   }
 
   /* ── Grok API call ── */
@@ -724,11 +737,12 @@
   }
 
   function cbSendGrok(cmd, ta, file){
-    var apiKey = localStorage.getItem(GROK_KEY) || '';
+    var apiKey = cbKey();
+    var provider = cbProvider();
     if(!apiKey){
       addMsg(
         'No API key saved.<br>' +
-        '<span style="cursor:pointer;color:#1d4ed8;text-decoration:underline;font-weight:600" onclick="cbChangeKey()">→ Enter your Groq key now</span>',
+        '<span style="cursor:pointer;color:#1d4ed8;text-decoration:underline;font-weight:600" onclick="cbChangeKey()">→ Enter your selected provider key now</span>',
         'error'
       ); return;
     }
@@ -772,7 +786,7 @@
     // Build message content (with optional text attachment — Groq has no vision)
     var textBody = '';
     if(file && file.type === 'image'){
-      addMsg('Image analysis is not supported with Groq. Attach a text/csv file instead.', 'error');
+      addMsg('Image analysis is not supported in this bot. Attach a text/csv file instead.', 'error');
       return;
     }
     if(file && file.type === 'text'){
@@ -784,7 +798,7 @@
       textBody += 'Current list ('+sentCount+' of '+totalCount+' items):\n'+compact+'\n\n';
       if(sentCount < totalCount){
         textBody += '(Showing '+sentCount+' relevant items out of '+totalCount+' total. Full list available.)\n\n';
-        addMsg('Sending '+sentCount+' relevant items to Groq ('+totalCount+' total). For whole-list operations say "all items".', 'bot');
+        addMsg('Sending '+sentCount+' relevant items to '+CB_PROVIDERS[provider]+' ('+totalCount+' total). For whole-list operations say "all items".', 'bot');
       }
     }
     textBody += 'Command: '+cmd;
@@ -805,43 +819,29 @@
     var sendBtn = document.getElementById('cb-send');
     input.disabled=true; sendBtn.disabled=true;
 
-    var thinkEl = addMsg('<div class="cb-dots"><span></span><span></span><span></span></div> Asking Groq…', 'thinking');
+    var thinkEl = addMsg('<div class="cb-dots"><span></span><span></span><span></span></div> Asking '+CB_PROVIDERS[provider]+'…', 'thinking');
 
     fetch('/chatbot/grok', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({apiKey:apiKey, command:cmd, items:items, rawPayload:payload})
+      body: JSON.stringify({provider:provider, apiKey:apiKey, command:cmd, items:items, rawPayload:payload})
     })
     .then(function(r){return r.json();})
     .then(function(data){
       thinkEl.remove();
       if(data.error){
-        if(/401|403|invalid.*key/i.test(data.error)){
-          localStorage.removeItem(GROK_KEY);
-          // Turn off the toggle so user knows Groq is inactive
+        if(data.code === 401 || data.code === 403){
           cbSetMode('local');
-          addMsg(
-            '❌ <b>API key rejected by Groq</b> — key has been cleared.<br><br>' +
-            'What happened: your key was invalid or expired.<br><br>' +
-            '🔑 Get a free key at: <a href="https://console.groq.com" target="_blank" style="color:#b91c1c;font-weight:600">console.groq.com</a> → Login → API Keys → Create key<br><br>' +
-            '<span style="cursor:pointer;color:#1d4ed8;text-decoration:underline;font-weight:600" onclick="cbChangeKey()">→ Enter new key now</span>',
-            'error'
-          );
-        } else if(/429|rate.?limit|too many/i.test(data.error)){
-          addMsg(
-            '⏳ <b>Rate limit hit!</b><br><br>' +
-            'What happened: Groq free tier allows <b>~30 requests/min</b> and <b>~14,400 tokens/min</b>. Your key has temporarily hit that ceiling.<br><br>' +
-            '✅ <b>Wait ~60 seconds</b> then try again — limit resets automatically.<br>' +
-            '🔑 <b>Or use a different key:</b> <a href="https://console.groq.com" target="_blank" style="color:#1d4ed8">console.groq.com</a> → API Keys (create a second free key).<br><br>' +
-            '<span style="cursor:pointer;color:#1d4ed8;text-decoration:underline" onclick="cbChangeKey()">→ Change API key now</span>',
-            'error'
-          );
+          addMsg('API key rejected by '+CB_PROVIDERS[provider]+'. Check or replace the key.', 'error');
+        } else if(data.code === 429){
+          addMsg('Provider rate limit reached. Please retry later or check usage.', 'error');
         } else {
-          addMsg('<b>Groq error:</b> ' + data.error, 'error');
+          addMsg(CB_PROVIDERS[provider]+' error: '+escapeHtmlStr(data.error), 'error');
         }
         return;
       }
       var reply = data.reply || '';
+      if(data.usage && data.usage.total_tokens){document.getElementById('cb-usage-status').textContent = 'Last request: '+data.usage.total_tokens+' tokens. Check usage for account limits.';}
       // Detect if Grok returned a list to apply
       if(ta){
         var gLines = reply.split('\n').map(function(l){return l.trim();}).filter(Boolean);
