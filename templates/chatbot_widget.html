@@ -830,8 +830,14 @@
     input.disabled=true; sendBtn.disabled=true;
 
     var thinkEl = addMsg('<div class="cb-dots"><span></span><span></span><span></span></div> Asking '+CB_PROVIDERS[provider]+'…', 'thinking');
+    var controller = new AbortController();
+    var slowTimer = setTimeout(function(){
+      if(thinkEl.isConnected) thinkEl.textContent = 'Still waiting for '+CB_PROVIDERS[provider]+'… free models can be slow.';
+    }, 12000);
+    var stopTimer = setTimeout(function(){ controller.abort(); }, 28000);
 
     fetch('/chatbot/grok', {
+      signal:controller.signal,
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({provider:provider, modelTier:document.getElementById('cb-model-tier').value, apiKey:apiKey, command:cmd, items:items, rawPayload:payload})
@@ -885,9 +891,12 @@
     })
     .catch(function(err){
       thinkEl.remove();
-      addMsg('Network error: '+err.message, 'error');
+      addMsg(err.name === 'AbortError'
+        ? 'The AI did not answer within 28 seconds. Please try again.'
+        : 'Network error: '+escapeHtmlStr(err.message), 'error');
     })
     .finally(function(){
+      clearTimeout(slowTimer); clearTimeout(stopTimer);
       input.disabled=false; sendBtn.disabled=false; input.focus();
     });
   }
