@@ -219,7 +219,7 @@
     <label for="cb-provider">AI provider</label>
     <select id="cb-provider" onchange="cbProviderChanged()">
       <option value="groq">Groq</option>
-      <option value="openai">OpenAI (ChatGPT API)</option>
+      <option value="openai">OpenAI API</option>
       <option value="openrouter">OpenRouter</option>
     </select>
     <button type="button" onclick="cbCheckUsage()">Check usage</button>
@@ -405,8 +405,8 @@
   /* ── API key and usage ── */
   function cbChangeKey(){
     var current = cbKey();
-    var key = prompt(CB_PROVIDERS[cbProvider()]+' API key (saved on this device):\\nCurrent: '+
-      (current ? '…'+current.slice(-6) : 'none')+'\\nEnter a new key, or leave blank to keep this one.');
+    var key = prompt(CB_PROVIDERS[cbProvider()]+' API key (saved on this device):\nCurrent: '+
+      (current ? '…'+current.slice(-6) : 'none')+'\nEnter a new key, or leave blank to keep this one.');
     if(key === null) return;
     if(!key.trim()) return;
     localStorage.setItem(cbKeyName(), key.trim());
