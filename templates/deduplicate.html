@@ -229,6 +229,9 @@
         color: #333;
     }
 
+    .removed-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); white-space: normal; }
+    .removed-row span { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .removed-row button { flex-shrink: 0; min-height: 44px; }
     .split-view-wrapper {
         display: flex;
         gap: 0;
@@ -608,36 +611,76 @@
         e.preventDefault();
     }
 
-    function searchItems() {
-        const searchBox = document.getElementById('searchBox');
-        if (!searchBox) return;
-
-        const searchTerm = searchBox.value.toLowerCase().trim();
-        const leftContent = document.getElementById('leftContent');
-        const rightContent = document.getElementById('rightContent');
-
-        if (!searchTerm) {
-            leftContent.value = originalLeftContent;
-            rightContent.textContent = originalRightContent;
-        } else {
-            const leftLines = originalLeftContent.split('\n');
-            const filteredLeft = leftLines.filter(line =>
-                line.toLowerCase().includes(searchTerm)
-            ).join('\n');
-            leftContent.value = filteredLeft;
-
-            const rightLines = originalRightContent.split('\n');
-            const filteredRight = rightLines.filter(line =>
-                line.toLowerCase().includes(searchTerm)
-            ).join('\n');
-            rightContent.textContent = filteredRight;
-        }
-
-        const leftRows = leftContent.value.split('\n').filter(l => l.trim()).length;
-        const rightRows = rightContent.textContent.split('\n').filter(l => l.trim()).length;
-        document.getElementById('leftRowCount').textContent = `Rows: ${leftRows}`;
-        document.getElementById('rightRowCount').textContent = `Rows: ${rightRows}`;
+    let removedRows = [];
+    function renderRemoved(id, query = '') {
+        const box = document.getElementById(id);
+        const scrollTop = box.scrollTop;
+        box.replaceChildren();
+        let count = 0;
+        removedRows.forEach((item, index) => {
+            if (item.restored || !item.text.toLowerCase().includes(query)) return;
+            count++;
+            const row = document.createElement('div');
+            row.className = 'removed-row';
+            const label = document.createElement('span');
+            label.textContent = item.text;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-copy';
+            button.textContent = '↩ Add back';
+            button.setAttribute('aria-label', 'Add back: ' + item.text);
+            button.onclick = () => restoreRemoved(index);
+            row.append(label, button);
+            box.appendChild(row);
+        });
+        if (!count) box.textContent = query ? '(No matching items)' : '(No items)';
+        box.scrollTop = scrollTop;
+        return count;
     }
+
+    function syncKeptEdits() {
+        if (!currentData || document.getElementById('leftContent').readOnly ||
+            document.getElementById('splitView').style.display === 'none') return;
+        currentData.deduplicated_text = document.getElementById('leftContent').value;
+        originalLeftContent = currentData.deduplicated_text;
+        document.getElementById('deduplicatedOutput').textContent = originalLeftContent;
+    }
+
+    function restoreRemoved(index) {
+        const item = removedRows[index];
+        if (!currentData || !item || item.restored) return;
+        syncKeptEdits();
+        item.restored = true;
+        currentData.deduplicated_text =
+            (currentData.deduplicated_text || '').replace(/\s+$/, '') +
+            (currentData.deduplicated_text.trim() ? '\n' : '') + item.text;
+        currentData.removed_text = removedRows.filter(row => !row.restored).map(row => row.text).join('\n');
+        originalLeftContent = currentData.deduplicated_text;
+        originalRightContent = currentData.removed_text;
+        document.getElementById('deduplicatedOutput').textContent = originalLeftContent;
+        renderRemoved('removedListOutput');
+        searchItems();
+        const stats = document.querySelectorAll('#statsGrid .stat-number');
+        const restored = removedRows.filter(row => row.restored).length;
+        if (stats.length === 3) {
+            stats[1].textContent = currentData.stats.unique_count + restored;
+            stats[2].textContent = Math.max(0, currentData.stats.duplicates_removed - restored);
+            stats[1].previousElementSibling.textContent = 'Kept';
+        }
+        showSuccess('✓ Item added back to the deduplicated list.');
+    }
+
+    function searchItems() {
+        const query = document.getElementById('searchBox').value.toLowerCase().trim();
+        const left = document.getElementById('leftContent');
+        left.readOnly = Boolean(query);
+        left.value = originalLeftContent.split('\n').filter(line => !query || line.toLowerCase().includes(query)).join('\n');
+        const count = renderRemoved('rightContent', query);
+        document.getElementById('leftRowCount').textContent = 'Rows: ' + left.value.split('\n').filter(line => line.trim()).length;
+        document.getElementById('rightRowCount').textContent = 'Rows: ' + count;
+    }
+
+    document.getElementById('leftContent').addEventListener('input', syncKeptEdits);
 
     function clearSearch() {
         const searchBox = document.getElementById('searchBox');
@@ -669,6 +712,7 @@
     }
 
     function toggleSplitView() {
+        syncKeptEdits();
         const toggle = document.getElementById('splitViewToggle').checked;
         document.getElementById('singleView').style.display = toggle ? 'none' : 'block';
         document.getElementById('splitView').style.display = toggle ? 'block' : 'none';
@@ -687,7 +731,8 @@
             originalRightContent = cleanedRemoved;
 
             document.getElementById('leftContent').value = originalLeftContent;
-            document.getElementById('rightContent').textContent = originalRightContent;
+            renderRemoved('rightContent');
+            document.getElementById('leftContent').readOnly = false;
 
             document.getElementById('searchBox').value = '';
 
@@ -732,8 +777,10 @@
             .then(data => {
                 showLoading(false);
                 if (data.error) { showError(data.error); return; }
+                document.getElementById('splitView').style.display = 'none';
                 currentData = data;
                 currentToken = data.download_token;
+                removedRows = (data.removed_text || '').split('\n').filter(line => line.trim()).map(text => ({ text, restored: false }));
 
                 document.getElementById('statsGrid').innerHTML = `
                     <div class="stat-card">
@@ -751,7 +798,8 @@
                 `;
 
                 document.getElementById('deduplicatedOutput').textContent = data.deduplicated_text || '';
-                document.getElementById('removedListOutput').textContent = data.removed_text || '(No items)';
+                renderRemoved('removedListOutput');
+                toggleSplitView();
                 document.getElementById('resultsSection').classList.add('show');
                 setTimeout(() => document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' }), 100);
                 showSuccess('✓ Done!');
@@ -761,11 +809,16 @@
 
     function copyToClipboard(id) {
         const el = document.getElementById(id);
-        const text = el.textContent || el.value;
+        syncKeptEdits();
+        const query = document.getElementById('searchBox').value.toLowerCase().trim();
+        const text = id === 'removedListOutput' ? (currentData?.removed_text || '') :
+            id === 'rightContent' ? removedRows.filter(row => !row.restored && row.text.toLowerCase().includes(query)).map(row => row.text).join('\n') :
+            (el.value !== undefined ? el.value : el.textContent);
         navigator.clipboard.writeText(text).then(() => alert('✓ Copied!')).catch(() => alert('Failed'));
     }
 
     function cleanFormatOutput() {
+        syncKeptEdits();
         const output = document.getElementById('deduplicatedOutput');
         const text = output.textContent;
         const cleaned = text.split('\n').map(line => {
@@ -773,22 +826,36 @@
             return line.replace(/\s+\|/g, ' |').trim();
         }).filter(line => line).join('\n');
         output.textContent = cleaned;
+        if (currentData) currentData.deduplicated_text = cleaned;
+        originalLeftContent = cleaned;
+        searchItems();
         alert('✓ Format cleaned!');
     }
 
     function cleanFormatRemoved() {
-        const output = document.getElementById('removedListOutput');
-        const text = output.textContent;
-        const cleaned = text.split('\n').map(line => {
-            if (!line.trim() || !line.includes('-----')) return '';
-            return line.replace(/\s+\|/g, ' |').trim();
-        }).filter(line => line).join('\n');
-        output.textContent = cleaned;
-        alert('✓ Format cleaned!');
+        if (!currentData) return;
+        removedRows.forEach(row => { row.text = row.text.replace(/\s+\|/g, ' |').trim(); });
+        currentData.removed_text = removedRows.filter(row => !row.restored).map(row => row.text).join('\n');
+        originalRightContent = currentData.removed_text;
+        renderRemoved('removedListOutput');
+        searchItems();
+        showSuccess('✓ Format cleaned!');
+    }
+
+    function downloadCurrentText(text, filename) {
+        const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
 
     function downloadAsText() {
-        if (currentToken) window.location.href = `/download?token=${currentToken}`;
+        syncKeptEdits();
+        if (currentData) downloadCurrentText(currentData.deduplicated_text || '', 'deduplicated.txt');
     }
 
     // Send the FINAL deduplicated TXT back to /make_html via a temporary IndexedDB
@@ -798,6 +865,7 @@
     // Profile settings on make_html (title/logo/etc.) are stored there and are
     // not affected by this transfer. The full list is never placed in the URL.
     async function continueInMakeHtml() {
+        syncKeptEdits();
         const txt = (currentData && currentData.deduplicated_text) || '';
         if (!txt.trim()) { showError('Run deduplication first.'); return; }
         if (!window.SharedStore) { showError('Local storage is unavailable. Use “Download” instead.'); return; }
@@ -811,7 +879,7 @@
     }
 
     function downloadRemovedAsText() {
-        if (currentData?.removed_token) window.location.href = `/download?token=${currentData.removed_token}`;
+        if (currentData) downloadCurrentText(currentData.removed_text || '', 'removed_items.txt');
     }
 
     function clearText() {
