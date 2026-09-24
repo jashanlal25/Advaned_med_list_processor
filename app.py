@@ -600,24 +600,17 @@ def deduplicate_items(text_content):
     output_lines = [best_items[name][1] for name in order]
     output_text = '\n'.join(output_lines)
 
-    # Build output for removed items - CLEAN FORMAT BY DEFAULT
+    # Subtract only the kept occurrences, not every line with equal text.
+    # Identical extra copies are removed items too and must remain restorable.
+    kept_remaining = {}
+    for line in output_lines:
+        kept_remaining[line] = kept_remaining.get(line, 0) + 1
     removed_lines = []
     for item_name, discount, line in all_items:
-        normalized = normalize_name(item_name)
-        # Find which canonical name this belongs to
-        canonical_name = None
-        for existing_norm, existing_canonical in name_groups.items():
-            if normalized == existing_norm or quick_match(normalized, existing_norm):
-                canonical_name = existing_canonical
-                break
-
-        # Check if this line was kept or removed
-        if canonical_name in best_items:
-            kept_line = best_items[canonical_name][1]
-            if line != kept_line:
-                # Clean the removed line - remove extra spaces
-                cleaned = clean_removed_line(line)
-                removed_lines.append(cleaned)
+        if kept_remaining.get(line, 0):
+            kept_remaining[line] -= 1
+        else:
+            removed_lines.append(clean_removed_line(line))
 
     removed_text = '\n'.join(removed_lines)
 
