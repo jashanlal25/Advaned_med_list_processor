@@ -73,6 +73,12 @@ app.register_blueprint(chatbot_bp)
 from android_download import android_download
 app.register_blueprint(android_download)
 
+@app.route('/html_file_logos/<path:filename>')
+def html_file_logo(filename):
+    """Serve bundled MedList logo assets used by the shared web/APK header."""
+    from flask import send_from_directory
+    return send_from_directory(os.path.join(app.root_path, 'html_file_logos'), filename)
+
 
 @app.after_request
 def add_pwa_headers(response):
