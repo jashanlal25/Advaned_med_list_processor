@@ -86,33 +86,13 @@
         flex-shrink: 0;
     }
 
-    .logo-icon {
-        width: 45px;
-        height: 45px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .logo-icon:hover {
-        transform: rotate(10deg) scale(1.1);
-        box-shadow: 0 6px 25px rgba(102, 126, 234, 0.6);
-    }
-
-    .logo-text {
-        color: #ffffff;
-        font-size: 1.4em;
-        font-weight: 700;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        text-shadow: 0 0 30px rgba(102, 126, 234, 0.3);
+    .brand-logo {
+        width: 112px;
+        height: 58px;
+        display: block;
+        flex-shrink: 0;
+        overflow: visible;
+        filter: drop-shadow(0 3px 8px rgba(32, 176, 232, 0.24));
     }
 
     .nav-links {
@@ -427,14 +407,9 @@
             font-size: 10px;
         }
 
-        .logo-icon {
-            width: 38px;
-            height: 38px;
-            font-size: 20px;
-        }
-
-        .logo-text {
-            font-size: 1.2em;
+        .brand-logo {
+            width: 100px;
+            height: 54px;
         }
     }
 
@@ -459,23 +434,33 @@
             font-size: 13px;
         }
 
-        .logo-icon {
-            width: 35px;
-            height: 35px;
-            font-size: 18px;
-        }
-
-        .logo-text {
-            font-size: 1.1em;
+        .brand-logo {
+            width: 100px;
+            height: 54px;
         }
     }
 </style>
 
 <!-- Extraordinary Navigation Header -->
 <header class="nav-header">
-    <a href="/" class="nav-logo">
-        <div class="logo-icon">💊</div>
-        <span class="logo-text">MediList Pro</span>
+    <a href="/" class="nav-logo" aria-label="MedList home">
+        <svg class="brand-logo" viewBox="0 0 220 120" role="img" aria-label="MEDLIST">
+            <defs>
+                <linearGradient id="medlistCross" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#18b9dc"/>
+                    <stop offset="1" stop-color="#69d1e5"/>
+                </linearGradient>
+                <linearGradient id="medlistCheck" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#2578f2"/>
+                    <stop offset="1" stop-color="#2e8cff"/>
+                </linearGradient>
+            </defs>
+            <path d="M72 5h58a14 14 0 0 1 14 14v27h27a14 14 0 0 1 14 14v23a14 14 0 0 1-14 14h-27v18a14 14 0 0 1-14 14H72a14 14 0 0 1-14-14V97H31A14 14 0 0 1 17 83V60a14 14 0 0 1 14-14h27V19A14 14 0 0 1 72 5z" fill="url(#medlistCross)"/>
+            <path d="M72 72l31 30 67-63 25 24-92 87-56-54z" fill="url(#medlistCheck)" transform="translate(0 -23)"/>
+            <text x="22" y="79" font-family="Arial,Helvetica,sans-serif" font-size="39" font-weight="900" letter-spacing="-2">
+                <tspan fill="#2e82f2">MED</tspan><tspan fill="#6bd3e6">LIST</tspan>
+            </text>
+        </svg>
     </a>
 
     <nav class="nav-links">
