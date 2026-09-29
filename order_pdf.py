@@ -117,5 +117,8 @@ def export_order_pdf():
     except (ValueError, TypeError) as exc:
         return Response('Invalid order payload: ' + str(exc), status=400)
     list_no = re.sub(r'[^A-Za-z0-9_-]', '', _text(payload.get('offerId'), 60)) or 'order'
-    return send_file(buf, mimetype='application/pdf', as_attachment=True,
-                     download_name=f'{list_no}-order.pdf')
+    response = send_file(buf, mimetype='application/pdf', as_attachment=False,
+                         download_name=f'{list_no}-order.pdf')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Cache-Control'] = 'no-store'
+    return response
