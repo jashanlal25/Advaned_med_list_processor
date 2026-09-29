@@ -73,6 +73,9 @@ app.register_blueprint(chatbot_bp)
 from android_download import android_download
 app.register_blueprint(android_download)
 
+from order_pdf import order_pdf
+app.register_blueprint(order_pdf)
+
 @app.route('/html_file_logos/<path:filename>')
 def html_file_logo(filename):
     """Serve bundled MedList logo assets used by the shared web/APK header."""
