@@ -64,12 +64,6 @@ def _pdf(payload):
     heading = ParagraphStyle('heading', parent=bold, fontSize=14, leading=17)
     right = ParagraphStyle('right', parent=normal, alignment=TA_RIGHT)
     center = ParagraphStyle('center', parent=normal, alignment=TA_CENTER)
-    footer_label = ParagraphStyle('footer_label', parent=center, fontSize=8,
-                                  leading=12, textColor=colors.HexColor('#647084'),
-                                  spaceBefore=0, spaceAfter=2)
-    footer_name = ParagraphStyle('footer_name', parent=center, fontSize=11, leading=14)
-    footer_contact = ParagraphStyle('footer_contact', parent=center, fontSize=8,
-                                    leading=12, textColor=colors.HexColor('#344054'))
     par = lambda value, style=normal: Paragraph(escape(_text(value)), style)
 
     title = _text(payload.get('shopTitle')) or 'MedList Order'
@@ -133,14 +127,6 @@ def _pdf(payload):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2.8),
     ]))
     story.append(table)
-    story += [Spacer(1, 4*mm),
-              Table([['']], colWidths=[width], rowHeights=[1],
-                    style=TableStyle([('LINEABOVE', (0, 0), (-1, -1),
-                                       0.5, colors.HexColor('#666666'))])),
-              Spacer(1, 3*mm),
-              par('D E V E L O P E D  B Y', footer_label),
-              par('ANAS SYSTEM', footer_name),
-              par('(SHUMAIL # 0324-2010921)', footer_contact)]
     doc.build(story)
     buf.seek(0)
     return buf
