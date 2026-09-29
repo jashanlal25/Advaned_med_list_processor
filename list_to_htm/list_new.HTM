@@ -1023,7 +1023,7 @@ if (btnPrepare){
       '</table>';
   }
 
-  function localPdf(){
+  async function localPdf(){
     var payload = buildOrderPayload();
     if (!payload) return;
     var form = document.getElementById('pdfForm');
@@ -1033,6 +1033,27 @@ if (btnPrepare){
       return;
     }
     input.value = JSON.stringify(payload);
+    // Share the generated PDF as a file when Android/Chrome supports it.
+    // The form opens the PDF viewer on browsers without file sharing.
+    if (navigator.share && navigator.canShare && typeof File !== 'undefined'){
+      var filename = String(payload.offerId || 'order').replace(/[^A-Za-z0-9_-]/g, '') + '-order.pdf';
+      var candidate = new File([''], filename, {type:'application/pdf'});
+      if (navigator.canShare({files:[candidate]})){
+        try {
+          var response = await fetch(form.action, {
+            method:'POST',
+            body:new URLSearchParams({payload:input.value})
+          });
+          if (!response.ok) throw new Error('PDF generation failed');
+          var file = new File([await response.blob()], filename, {type:'application/pdf'});
+          await navigator.share({files:[file], title:'MedList order PDF'});
+          return;
+        } catch (error){
+          if (error && error.name === 'AbortError') return;
+          // Network and unsupported-share errors still open a PDF preview.
+        }
+      }
+    }
     form.submit();
   }
   window.localPdf = localPdf;
