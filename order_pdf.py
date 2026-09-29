@@ -4,6 +4,7 @@ Keep the discount mark as display metadata. Calculations continue to use the
 numeric discount in the order payload.
 """
 
+import base64
 import io
 import json
 import os
@@ -132,6 +133,53 @@ def _pdf(payload):
     return buf
 
 
+def _share_page(pdf_bytes, filename):
+    """Give mobile browsers explicit share and download actions for one PDF."""
+    encoded = base64.b64encode(pdf_bytes).decode('ascii')
+    safe_name = json.dumps(filename)
+    return f'''<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MedList PDF Order</title>
+<style>
+*{{box-sizing:border-box}}body{{margin:0;font:15px system-ui,Arial,sans-serif;background:#f3f5f9;color:#172238}}
+main{{max-width:900px;margin:auto;padding:12px}}header{{background:#fff;border-radius:12px;padding:15px;margin-bottom:10px}}
+h1{{font-size:18px;margin:0 0 4px}}p{{margin:0;color:#596679;font-size:13px}}
+.viewer{{height:calc(100dvh - 185px);min-height:320px;background:#20242b;border-radius:12px;overflow:hidden}}
+iframe{{width:100%;height:100%;border:0}}.actions{{display:flex;gap:8px;margin-top:10px}}
+button{{flex:1;border:0;border-radius:9px;color:white;padding:15px 8px;font-size:15px;font-weight:700;background:#16a34a}}
+button+button{{background:#2168ee}}#message{{min-height:20px;margin-top:8px;text-align:center}}
+</style></head><body><main><header><h1>MedList PDF Order</h1><p>Preview, share, or download your PDF.</p></header>
+<div class="viewer"><iframe id="preview" title="Order PDF preview"></iframe></div>
+<div class="actions"><button id="share" type="button">Share PDF</button><button id="download" type="button">Download PDF</button></div>
+<p id="message" role="status"></p></main>
+<script>
+const name={safe_name};
+const binary=atob('{encoded}');
+const bytes=new Uint8Array(binary.length);
+for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+const pdf=new Blob([bytes],{{type:'application/pdf'}});
+const url=URL.createObjectURL(pdf);
+document.getElementById('preview').src=url;
+const message=document.getElementById('message');
+document.getElementById('download').onclick=()=>{{
+  const link=document.createElement('a');link.href=url;link.download=name;
+  document.body.appendChild(link);link.click();link.remove();
+}};
+document.getElementById('share').onclick=async()=>{{
+  try{{
+    const file=new File([pdf],name,{{type:'application/pdf'}});
+    if(!navigator.share || (navigator.canShare && !navigator.canShare({{files:[file]}})))
+      throw new Error('File sharing is unavailable in this browser');
+    await navigator.share({{files:[file],title:'MedList PDF Order'}});
+  }}catch(error){{
+    if(error.name==='AbortError')return;
+    message.textContent='Open the PDF preview and use your browser Share option.';
+    window.open(url,'_blank');
+  }}
+}};
+</script></body></html>'''
+
+
 @order_pdf.route('/order/pdf', methods=['POST'])
 def export_order_pdf():
     raw = request.form.get('payload', '')
@@ -147,8 +195,14 @@ def export_order_pdf():
     except (ValueError, TypeError) as exc:
         return Response('Invalid order payload: ' + str(exc), status=400)
     list_no = re.sub(r'[^A-Za-z0-9_-]', '', _text(payload.get('offerId'), 60)) or 'order'
+    filename = f'{list_no}-order.pdf'
+    # A form navigation gets the Anas-style actions. Existing fetch clients
+    # still receive the PDF bytes directly for navigator.share().
+    if 'text/html' in request.headers.get('Accept', ''):
+        return Response(_share_page(buf.getvalue(), filename), mimetype='text/html',
+                        headers={'Cache-Control': 'no-store'})
     response = send_file(buf, mimetype='application/pdf', as_attachment=False,
-                         download_name=f'{list_no}-order.pdf')
+                         download_name=filename)
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Cache-Control'] = 'no-store'
     return response
