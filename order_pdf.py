@@ -6,6 +6,7 @@ numeric discount in the order payload.
 
 import io
 import json
+import os
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -38,65 +39,108 @@ def _discount(item):
 
 
 def _pdf(payload):
+    import reportlab
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_RIGHT
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.platypus import (
         Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
     )
 
+    # ReportLab ships these fonts, so the bill looks consistent on Android PDF viewers.
+    font_dir = os.path.join(os.path.dirname(reportlab.__file__), 'fonts')
+    if 'MedListVera' not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont('MedListVera', os.path.join(font_dir, 'Vera.ttf')))
+        pdfmetrics.registerFont(TTFont('MedListVeraBold', os.path.join(font_dir, 'VeraBd.ttf')))
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12*mm,
-                            rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
-    normal = ParagraphStyle('normal', fontName='Helvetica', fontSize=8, leading=11)
-    bold = ParagraphStyle('bold', parent=normal, fontName='Helvetica-Bold')
-    heading = ParagraphStyle('heading', parent=bold, fontSize=16, leading=19)
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=8*mm,
+                            rightMargin=8*mm, topMargin=8*mm, bottomMargin=8*mm)
+    normal = ParagraphStyle('normal', fontName='MedListVera', fontSize=7, leading=9)
+    bold = ParagraphStyle('bold', parent=normal, fontName='MedListVeraBold')
+    heading = ParagraphStyle('heading', parent=bold, fontSize=14, leading=17)
     right = ParagraphStyle('right', parent=normal, alignment=TA_RIGHT)
-    right_bold = ParagraphStyle('right_bold', parent=right, fontName='Helvetica-Bold')
+    center = ParagraphStyle('center', parent=normal, alignment=TA_CENTER)
+    footer_label = ParagraphStyle('footer_label', parent=center, fontSize=8,
+                                  leading=12, textColor=colors.HexColor('#647084'),
+                                  spaceBefore=0, spaceAfter=2)
+    footer_name = ParagraphStyle('footer_name', parent=center, fontSize=11, leading=14)
+    footer_contact = ParagraphStyle('footer_contact', parent=center, fontSize=8,
+                                    leading=12, textColor=colors.HexColor('#344054'))
     par = lambda value, style=normal: Paragraph(escape(_text(value)), style)
 
     title = _text(payload.get('shopTitle')) or 'MedList Order'
     date = datetime.now(ZoneInfo('Asia/Karachi')).strftime('%Y-%m-%d %H:%M')
     story = [par(title, heading), par('Date: ' + date),
-             par('List No: ' + _text(payload.get('offerId'), 60)),
-             par('Name: ' + (_text(payload.get('customerName')) or '—')), Spacer(1, 7*mm)]
+             par('Name: ' + (_text(payload.get('customerName')) or '—'), bold),
+             Spacer(1, 5*mm)]
 
-    headers = ['Code', 'Item', 'Qty', 'TP', 'Disc%', 'Bonus', 'Tax', 'Net']
+    items = [item for item in (payload.get('items') or []) if isinstance(item, dict)]
+    if not items:
+        raise ValueError('No order items')
+    show_bonus = any(_text(item.get('bonus')) for item in items)
+    show_tax = any(_number(item.get('tax')) for item in items)
+    headers = ['Code', 'Item', 'Qty', 'TP', 'Disc%']
+    if show_bonus:
+        headers.append('Bonus')
+    if show_tax:
+        headers.append('Tax')
+    headers.append('Net')
     rows = [[par(h, bold) for h in headers]]
-    items = payload.get('items') or []
     for item in items:
-        if not isinstance(item, dict):
-            continue
-        rows.append([
+        row = [
             par(item.get('code'), normal),
-            par(item.get('name'), normal),
+            par(_text(item.get('name')).lower(), normal),
             par(_text(item.get('qty'), 20), right),
             par(f"{_number(item.get('tp')):,.2f}", right),
             par(_discount(item), right),
-            par(item.get('bonus') or '—', normal),
-            par(f"{_number(item.get('tax')):,.2f}" if _number(item.get('tax')) else '—', right),
-            par(f"{_number(item.get('lineNet')):,.2f}", right),
-        ])
-    if len(rows) == 1:
-        raise ValueError('No order items')
+        ]
+        if show_bonus:
+            row.append(par(item.get('bonus') or '—', center))
+        if show_tax:
+            row.append(par(f"{_number(item.get('tax')):,.2f}" if _number(item.get('tax')) else '—', right))
+        row.append(par(f"{_number(item.get('lineNet')):,.2f}", right))
+        rows.append(row)
 
-    table = Table(rows, colWidths=[14*mm, 55*mm, 11*mm, 23*mm,
-                                   23*mm, 17*mm, 17*mm, 24*mm], repeatRows=1)
+    # The original Anas bill keeps counts and totals inside the bordered table.
+    empty = [''] * (len(headers) - 3)
+    rows.append(empty + [par('Total Items', right), '', par(str(len(items)), right)])
+    rows.append(empty + [par('Total', right), '',
+                         par(f"{_number(payload.get('netTotal')):,.2f}", right)])
+    width = A4[0] - 20*mm
+    if show_bonus and show_tax:
+        ratios = [45, 157, 36, 72, 60, 51, 44, 74]
+    elif show_bonus or show_tax:
+        ratios = [50, 190, 40, 78, 67, 48, 65]
+    else:
+        ratios = [59, 244, 47, 75, 70, 44]
+    col_widths = [width * n / sum(ratios) for n in ratios]
+    table = Table(rows, colWidths=col_widths, repeatRows=1, hAlign='LEFT')
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#eef1f7')),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LINEBELOW', (0, 0), (-1, 0), 0.8, colors.HexColor('#666666')),
-        ('LINEBELOW', (0, 1), (-1, -1), 0.3, colors.HexColor('#dddddd')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f5fa')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#cfd2d7')),
+        ('SPAN', (0, -2), (-4, -2)),
+        ('SPAN', (-3, -2), (-2, -2)),
+        ('SPAN', (0, -1), (-4, -1)),
+        ('SPAN', (-3, -1), (-2, -1)),
         ('LEFTPADDING', (0, 0), (-1, -1), 4),
         ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 2.8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.8),
     ]))
     story.append(table)
-    story += [Spacer(1, 5*mm), par('Total Items: ' + str(len(rows)-1), right_bold),
-              par('Total: ' + f"{_number(payload.get('netTotal')):,.2f}", right_bold)]
+    story += [Spacer(1, 4*mm),
+              Table([['']], colWidths=[width], rowHeights=[1],
+                    style=TableStyle([('LINEABOVE', (0, 0), (-1, -1),
+                                       0.5, colors.HexColor('#666666'))])),
+              Spacer(1, 3*mm),
+              par('D E V E L O P E D  B Y', footer_label),
+              par('ANAS SYSTEM', footer_name),
+              par('(SHUMAIL # 0324-2010921)', footer_contact)]
     doc.build(story)
     buf.seek(0)
     return buf
