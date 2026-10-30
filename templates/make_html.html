@@ -523,6 +523,11 @@
             max-width: 40px;
             text-align: center;
             padding: 5px;
+            position: sticky;
+            right: 0;
+            z-index: 1;
+            background: var(--table-row);
+            box-shadow: -1px 0 0 var(--border-color);
         }
 
         .preview-content .col-num {
@@ -1451,13 +1456,13 @@
             const visCount = Object.values(vis).filter(Boolean).length + (deleteEnabled ? 1 : 0);
 
             let headerHtml = '<tr>';
-            if (deleteEnabled)  headerHtml += '<th class="col-delete"></th>';
             if (vis.num)   headerHtml += '<th class="col-num">#</th>';
             if (vis.name)  headerHtml += '<th class="col-name">Item Name</th>';
             if (vis.disc)  headerHtml += '<th class="col-value">Disc%</th>';
             if (vis.bonus) headerHtml += '<th class="col-value">Bonus</th>';
             if (vis.tp)    headerHtml += '<th class="col-value">T.P</th>';
             if (vis.tax)   headerHtml += '<th class="col-value">Tax</th>';
+            if (deleteEnabled) headerHtml += '<th class="col-delete" aria-label="Delete row"></th>';
             headerHtml += '</tr>';
             thead.innerHTML = headerHtml;
 
@@ -1482,12 +1487,6 @@
 
                 let rowHtml = `<tr class="item-row" ${da}>`;
 
-                if (deleteEnabled) {
-                    rowHtml += `<td class="col-delete"><button class="delete-btn" onclick="deleteRow(this.closest('tr'))"
-                        style="background:#dc3545;color:white;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;margin:0 auto;"
-                        title="Delete this row">✕</button></td>`;
-                }
-
                 const ec = editEnabled ? 'editable-cell' : '';
                 const es = editEnabled ? 'cursor:pointer;' : '';
                 const mk = ft => editEnabled ? `onclick="editCellInline(this,'${ft}')"` : '';
@@ -1498,6 +1497,12 @@
                 if (vis.bonus) rowHtml += `<td class="col-value ${ec}" style="${es}" ${mk('bonus')}>${item.bonus}</td>`;
                 if (vis.tp)    rowHtml += `<td class="col-value ${ec}" style="${es}" ${mk('tp')}>${item.tp}</td>`;
                 if (vis.tax)   rowHtml += `<td class="col-value ${ec}" style="${es}" ${mk('tax')}>${item.tax}</td>`;
+
+                if (deleteEnabled) {
+                    rowHtml += `<td class="col-delete"><button class="delete-btn" onclick="deleteRow(this.closest('tr'))"
+                        style="background:#dc3545;color:white;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;margin:0 auto;"
+                        title="Delete this row">✕</button></td>`;
+                }
 
                 rowHtml += '</tr>';
                 html += rowHtml;
