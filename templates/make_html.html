@@ -530,6 +530,17 @@
             box-shadow: -1px 0 0 var(--border-color);
         }
 
+        .preview-content[data-delete-side="left"] .col-delete {
+            left: 0;
+            right: auto;
+            box-shadow: 1px 0 0 var(--border-color);
+        }
+
+        .delete-side-toggle { display: inline-flex; gap: 4px; align-items: center; }
+        .delete-side-toggle label { margin: 0; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; background: var(--input-bg); }
+        .delete-side-toggle label:has(input:checked) { background: #0d6efd; color: white; border-color: #0d6efd; }
+        .delete-side-toggle input { margin-right: 4px; }
+
         .preview-content .col-num {
             width: 40px;
             min-width: 40px;
@@ -845,6 +856,11 @@
                     <div style="display: flex; align-items: center;">
                         <input type="checkbox" id="enableDeleteButtons" onchange="toggleDeleteButtons()">
                         <label for="enableDeleteButtons" style="margin-left: 5px; cursor: pointer;">Enable row deletion (✕)</label>
+                    </div>
+                    <div class="delete-side-toggle" role="group" aria-label="Delete button side">
+                        <span>Delete side:</span>
+                        <label><input type="radio" name="deleteSide" value="left" checked onchange="updatePreview()">Left</label>
+                        <label><input type="radio" name="deleteSide" value="right" onchange="updatePreview()">Right</label>
                     </div>
                     <div style="display: flex; align-items: center;">
                         <input type="checkbox" id="enableEditButtons" onchange="toggleEditButtons()" checked>
@@ -1433,6 +1449,9 @@
             const deleteEnabled = document.getElementById('enableDeleteButtons') && document.getElementById('enableDeleteButtons').checked;
             const editEnabled   = document.getElementById('enableEditButtons')   && document.getElementById('enableEditButtons').checked;
 
+            const deleteSide = document.querySelector('input[name="deleteSide"]:checked')?.value || 'left';
+            if (previewContent) previewContent.dataset.deleteSide = deleteSide;
+
             const hasExtended = items.some(it => it.isExtended);
             const colToggles = document.getElementById('colToggles');
             if (colToggles) colToggles.style.display = items.length > 0 ? 'flex' : 'none';
@@ -1456,13 +1475,14 @@
             const visCount = Object.values(vis).filter(Boolean).length + (deleteEnabled ? 1 : 0);
 
             let headerHtml = '<tr>';
+            if (deleteEnabled && deleteSide === 'left') headerHtml += '<th class="col-delete" aria-label="Delete row"></th>';
             if (vis.num)   headerHtml += '<th class="col-num">#</th>';
             if (vis.name)  headerHtml += '<th class="col-name">Item Name</th>';
             if (vis.disc)  headerHtml += '<th class="col-value">Disc%</th>';
             if (vis.bonus) headerHtml += '<th class="col-value">Bonus</th>';
             if (vis.tp)    headerHtml += '<th class="col-value">T.P</th>';
             if (vis.tax)   headerHtml += '<th class="col-value">Tax</th>';
-            if (deleteEnabled) headerHtml += '<th class="col-delete" aria-label="Delete row"></th>';
+            if (deleteEnabled && deleteSide === 'right') headerHtml += '<th class="col-delete" aria-label="Delete row"></th>';
             headerHtml += '</tr>';
             thead.innerHTML = headerHtml;
 
@@ -1485,7 +1505,11 @@
                            `data-bonus="${escapeHtml(item.bonus)}" data-tax="${escapeHtml(item.tax)}" `+
                            `data-extended="${item.isExtended ? '1' : '0'}" data-line-index="${item.lineIndex}"`;
 
+                const deleteCell = `<td class="col-delete"><button class="delete-btn" onclick="deleteRow(this.closest('tr'))"
+                        style="background:#dc3545;color:white;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;margin:0 auto;"
+                        title="Delete this row">✕</button></td>`;
                 let rowHtml = `<tr class="item-row" ${da}>`;
+                if (deleteEnabled && deleteSide === 'left') rowHtml += deleteCell;
 
                 const ec = editEnabled ? 'editable-cell' : '';
                 const es = editEnabled ? 'cursor:pointer;' : '';
@@ -1498,11 +1522,7 @@
                 if (vis.tp)    rowHtml += `<td class="col-value ${ec}" style="${es}" ${mk('tp')}>${item.tp}</td>`;
                 if (vis.tax)   rowHtml += `<td class="col-value ${ec}" style="${es}" ${mk('tax')}>${item.tax}</td>`;
 
-                if (deleteEnabled) {
-                    rowHtml += `<td class="col-delete"><button class="delete-btn" onclick="deleteRow(this.closest('tr'))"
-                        style="background:#dc3545;color:white;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;margin:0 auto;"
-                        title="Delete this row">✕</button></td>`;
-                }
+                if (deleteEnabled && deleteSide === 'right') rowHtml += deleteCell;
 
                 rowHtml += '</tr>';
                 html += rowHtml;
@@ -2252,3 +2272,4 @@
     {% include 'chatbot_widget.html' %}
 </body>
 </html>
+
