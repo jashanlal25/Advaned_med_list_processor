@@ -1093,7 +1093,7 @@
         if (savedWhatsapp) whatsappInput.value = savedWhatsapp;
         if (savedMessage) document.getElementById('message').value = savedMessage;
 
-        // Restore last list number (persists across sessions, increments only after successful download)
+        // Restore last list number (persists across sessions, increments only after successful generation)
         const savedListNo = localStorage.getItem('last_list_no');
         if (savedListNo) document.getElementById('list_no').value = savedListNo;
 
@@ -1638,6 +1638,7 @@
                 result.style.display = 'block';
 
                 if (data.success) {
+                    _incrementListNo();
                     resultCard.className = 'result-card';
                     const oldName = data.old_filename || '';
                     const newName = data.new_filename || '';
@@ -1711,7 +1712,6 @@
                 link.remove();
                 setTimeout(() => URL.revokeObjectURL(url), 60000);
             }
-            _incrementListNo();
         }
 
         function previewGenerated(kind) {
