@@ -572,6 +572,9 @@
             background: color-mix(in srgb, #0d6efd 18%, var(--table-row)) !important;
         }
 
+        .percentage-stepper { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+        .percentage-stepper button { min-width:32px; height:36px; padding:0 6px; border:1px solid var(--accent-border); border-radius:7px; background:#0d6efd; color:white; font-size:20px; touch-action:manipulation; cursor:pointer; }
+        .percentage-stepper span { min-width:44px; text-align:center; }
         /* Inline edit input styling */
         .inline-edit-input {
             width: 100% !important;
@@ -1446,6 +1449,7 @@
         }
 
         function updatePreview(options = {}) {
+            closePercentageStepper();
             const restorePageScroll = options.restorePageScroll !== false;
             const previewContent = document.getElementById('previewContent');
             const savedScrollTop = previewContent ? previewContent.scrollTop : 0;
@@ -1989,7 +1993,63 @@
         }
 
         // Edit a single cell inline — click any editable cell to edit it
+
+        let percentageStepper = null;
+        let percentageStepperTimer;
+        function closePercentageStepper() {
+            clearTimeout(percentageStepperTimer);
+            if (percentageStepper) {
+                percentageStepper.textContent = percentageStepper.closest('tr').dataset.value;
+                percentageStepper = null;
+            }
+        }
+        function schedulePercentageClose() {
+            clearTimeout(percentageStepperTimer);
+            percentageStepperTimer = setTimeout(closePercentageStepper, 2000);
+        }
+        function openPercentageStepper(cell) {
+            closePercentageStepper();
+            percentageStepper = cell;
+            cell.innerHTML = '<span class="percentage-stepper"><button type="button" aria-label="Decrease discount">−</button><span></span><button type="button" aria-label="Increase discount">+</button></span>';
+            const controls = cell.querySelector('.percentage-stepper');
+            const valueLabel = controls.querySelector('span');
+            valueLabel.textContent = cell.closest('tr').dataset.value;
+            controls.addEventListener('click', event => event.stopPropagation());
+            const buttons = controls.querySelectorAll('button');
+            buttons.forEach((button, index) => button.addEventListener('click', () => {
+                const row = cell.closest('tr');
+                const match = row.dataset.value.match(/^(\s*)(\d+(?:\.\d+)?)(\s*%[\s\S]*)$/);
+                if (!match) return;
+                const next = Math.max(0, Math.round((Number(match[2]) + (index ? 1 : -1)) * 100) / 100);
+                const value = match[1] + next.toFixed(2) + match[3];
+                const lines = editorTextarea.value.split('\n');
+                const lineIndex = Number(row.dataset.lineIndex);
+                if (!Number.isInteger(lineIndex) || !lines[lineIndex]) return;
+                const separator = lines[lineIndex].indexOf('-----');
+                if (separator < 0) return;
+                const rest = lines[lineIndex].slice(separator + 5);
+                const pipe = rest.indexOf('|');
+                const original = pipe < 0 ? rest : rest.slice(0, pipe);
+                const leading = original.match(/^\s*/)[0];
+                const trailing = original.match(/\s*$/)[0];
+                lines[lineIndex] = lines[lineIndex].slice(0, separator + 5) + leading + value.trim() + trailing + (pipe < 0 ? '' : rest.slice(pipe));
+                editorTextarea.value = lines.join('\n');
+                row.dataset.value = value;
+                valueLabel.textContent = value;
+                updateItemCount();
+                schedulePercentageClose();
+            }));
+            schedulePercentageClose();
+        }
+
         function editCellInline(cell, fieldType) {
+            if (percentageStepper === cell) { schedulePercentageClose(); return; }
+            closePercentageStepper();
+            if (!isEditing && !savingInProgress && fieldType === 'value' &&
+                /^\s*\d+(?:\.\d+)?\s*%/.test(cell.closest('tr').dataset.value || '')) {
+                openPercentageStepper(cell);
+                return;
+            }
             if (savingInProgress) {
                 pendingEdit = { fieldType, itemName: cell.closest('tr').dataset.name };
                 return;
@@ -2128,6 +2188,7 @@
         let undoDeleteTimer = null;
 
         function deleteRow(row) {
+            closePercentageStepper();
             const lineIndex = Number(row.dataset.lineIndex);
             const itemName = row.dataset.name || 'Item';
             const textarea = document.getElementById('editorTextarea');
