@@ -572,6 +572,15 @@
             background: color-mix(in srgb, #0d6efd 18%, var(--table-row)) !important;
         }
 
+        .editor-options { display:grid; grid-template-columns:1fr; gap:14px; margin:14px 0; color:var(--text-primary); }
+        .editor-options .editor-option { display:flex; align-items:center; justify-content:flex-start; gap:9px; margin:0; cursor:pointer; font-size:13px; line-height:1.45; }
+        .editor-option input { flex:0 0 auto; width:18px; height:18px; margin:0; }
+        .editor-swipe-option { min-width:0; }
+        .editor-swipe-option small { display:block; margin:5px 0 0 27px; color:var(--text-secondary); font-size:11px; line-height:1.4; }
+        .swipe-delete-ghost { position:fixed; pointer-events:none; z-index:1400; overflow:hidden; background:var(--table-row); color:var(--text-primary); }
+        .swipe-delete-ghost table { border-collapse:collapse; table-layout:fixed; width:100%; }
+        .swipe-delete-ghost td { box-sizing:border-box; vertical-align:middle; }
+        @media (prefers-reduced-motion:reduce) { .preview-content tr.item-row { transition:none !important; } }
         .percentage-stepper { position:fixed; z-index:1500; display:flex; align-items:center; gap:6px; padding:7px; border:1px solid var(--accent-border); border-radius:10px; background:var(--bg-card); box-shadow:0 4px 18px #0005; white-space:nowrap; }
         .percentage-stepper button { min-width:36px; height:38px; padding:0 8px; border:0; border-radius:7px; background:#0d6efd; color:white; font-size:20px; touch-action:manipulation; cursor:pointer; }
         .percentage-stepper .percentage-number { min-width:78px; font-size:14px; }
@@ -865,24 +874,14 @@
                 </div>
 
                 <textarea class="editor-textarea" id="editorTextarea" placeholder="Item Name----- 10%&#10;Another Item----- 5%"></textarea>
-                <div style="margin-top: 10px; font-size: 12px; color: #666; display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
-                    <div style="display: flex; align-items: center;">
-                        <input type="checkbox" id="enableDeleteButtons" onchange="toggleDeleteButtons()">
-                        <label for="enableDeleteButtons" style="margin-left: 5px; cursor: pointer;">Enable row deletion (✕)</label>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                        <input type="checkbox" id="enableSwipeDelete" onchange="updatePreview()" aria-describedby="swipeDeleteHint">
-                        <label for="enableSwipeDelete" style="margin:0;cursor:pointer;">Enable swipe deletion</label>
+                <div class="editor-options">
+                    <label class="editor-option"><input type="checkbox" id="enableDeleteButtons" onchange="toggleDeleteButtons()"><span>Enable row deletion (✕)</span></label>
+                    <div class="editor-swipe-option">
+                        <label class="editor-option"><input type="checkbox" id="enableSwipeDelete" onchange="updatePreview()" aria-describedby="swipeDeleteHint"><span>Enable swipe deletion</span></label>
                         <small id="swipeDeleteHint">Swipe a row left or right to delete · Undo available</small>
                     </div>
-                    <div style="display: flex; align-items: center;">
-                        <input type="checkbox" id="enableEditButtons" onchange="toggleEditButtons()" checked>
-                        <label for="enableEditButtons" style="margin-left: 5px; cursor: pointer;">Enable row editing (✏️)</label>
-                    </div>
-                    <div style="display: flex; align-items: center;">
-                        <input type="checkbox" id="enableCheckDuplication" onchange="toggleCheckDuplication()">
-                        <label for="enableCheckDuplication" style="margin-left: 5px; cursor: pointer;">Check Duplication</label>
-                    </div>
+                    <label class="editor-option"><input type="checkbox" id="enableEditButtons" onchange="toggleEditButtons()" checked><span>Enable row editing (✏️)</span></label>
+                    <label class="editor-option"><input type="checkbox" id="enableCheckDuplication" onchange="toggleCheckDuplication()"><span>Check Duplication</span></label>
                 </div>
 
                 <!-- Revealed only when "Check Duplication" is checked. These two
@@ -2116,6 +2115,51 @@
         window.addEventListener('resize', positionPercentagePanel);
         if (window.visualViewport) window.visualViewport.addEventListener('resize', positionPercentagePanel);
 
+        function animateSwipeDeletion(row, direction) {
+            const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduced || !row.animate) { deleteRow(row); return; }
+            const body = row.parentElement;
+            const viewport = row.closest('.preview-content').getBoundingClientRect();
+            const visibleRows = Array.from(body.querySelectorAll('tr')).filter(item => {
+                const r = item.getBoundingClientRect();
+                return item !== row && r.bottom > viewport.top && r.top < viewport.bottom;
+            }).map(item => ({item, top:item.getBoundingClientRect().top}));
+            const rect = row.getBoundingClientRect();
+            const ghost = document.createElement('div');
+            ghost.className = 'swipe-delete-ghost';
+            ghost.setAttribute('aria-hidden', 'true');
+            ghost.style.cssText = 'left:' + rect.left + 'px;top:' + rect.top + 'px;width:' + rect.width + 'px;height:' + Math.max(0, Math.min(rect.bottom, viewport.bottom) - rect.top) + 'px';
+            const table = document.createElement('table');
+            const copy = row.cloneNode(true);
+            copy.style.transform = ''; copy.style.opacity = ''; copy.style.transition = '';
+            Array.from(copy.children).forEach((cell, index) => {
+                const original = row.children[index];
+                cell.style.width = original.getBoundingClientRect().width + 'px';
+                cell.style.minWidth = cell.style.width;
+                cell.style.position = 'static';
+                const style = getComputedStyle(original);
+                cell.style.padding = style.padding;
+                cell.style.backgroundColor = style.backgroundColor;
+                cell.style.color = style.color;
+                cell.style.font = style.font;
+            });
+            table.appendChild(copy); ghost.appendChild(table); document.body.appendChild(ghost);
+            deleteRow(row);
+            const animation = ghost.animate([
+                {transform:'translateX(0)', opacity:0.8},
+                {transform:'translateX(' + direction * rect.width + 'px)', opacity:0}
+            ], {duration:220, easing:'cubic-bezier(.22,.61,.36,1)', fill:'forwards'});
+            animation.onfinish = () => ghost.remove();
+            animation.oncancel = () => ghost.remove();
+            visibleRows.forEach(({item, top}) => {
+                if (!item.isConnected) return;
+                const delta = top - item.getBoundingClientRect().top;
+                if (Math.abs(delta) > 1) item.animate([
+                    {transform:'translateY(' + delta + 'px)'}, {transform:'translateY(0)'}
+                ], {duration:220, easing:'cubic-bezier(.22,.61,.36,1)'});
+            });
+        }
+
         function setupSwipeDeletion() {
             const body = document.getElementById('previewTableBody');
             if (body.dataset.swipeReady) return;
@@ -2128,6 +2172,7 @@
                 const row = event.target.closest('tr.item-row');
                 if (!row) return;
                 closePercentageStepper();
+                row.style.transition = 'none';
                 gesture = {row, x:event.touches[0].clientX, y:event.touches[0].clientY, dx:0, horizontal:false};
             }, {passive:true});
             body.addEventListener('touchmove', event => {
@@ -2144,7 +2189,7 @@
                 gesture.row.style.opacity = Math.abs(dx) >= 100 ? '0.45' : '0.8';
             }, {passive:false});
             function reset() {
-                if (gesture) { gesture.row.style.transform = ''; gesture.row.style.opacity = ''; }
+                if (gesture) { gesture.row.style.transition = 'transform 180ms ease-out, opacity 180ms ease-out'; gesture.row.style.transform = ''; gesture.row.style.opacity = ''; }
                 gesture = null;
             }
             body.addEventListener('touchend', () => {
@@ -2152,8 +2197,9 @@
                 const row = gesture.row;
                 const remove = enabled() && gesture.horizontal && Math.abs(gesture.dx) >= 100;
                 if (gesture.horizontal) suppressClickUntil = Date.now() + 500;
-                reset();
-                if (remove) deleteRow(row);
+                const direction = gesture.dx < 0 ? -1 : 1;
+                if (remove) { gesture = null; animateSwipeDeletion(row, direction); }
+                else reset();
             });
             body.addEventListener('touchcancel', reset);
             body.addEventListener('click', event => {
