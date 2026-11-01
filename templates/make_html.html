@@ -2039,9 +2039,9 @@
         }
         function writePercentage(cell, number) {
             const row = cell.closest('tr');
-            const match = row.dataset.value.match(/^(\s*)(\d+(?:\.\d+)?)(\s*%[\s\S]*)$/);
+            const match = row.dataset.value.match(/^(\s*)(-?\d+(?:\.\d+)?)(\s*%[\s\S]*)$/);
             if (!match || !Number.isFinite(number)) return false;
-            const value = match[1] + Math.max(0, number).toFixed(2) + match[3];
+            const value = match[1] + number.toFixed(2) + match[3];
             const lines = editorTextarea.value.split('\n');
             const index = Number(row.dataset.lineIndex);
             if (!Number.isInteger(index) || !lines[index]) return false;
@@ -2091,7 +2091,7 @@
                 finishPercentageInput = (cancel = false) => {
                     finishPercentageInput = null;
                     const text = input.value.trim();
-                    if (!cancel && /^\d+(?:\.\d{1,2})?$/.test(text)) writePercentage(cell, Number(text));
+                    if (!cancel && /^-?\d+(?:\.\d{1,2})?$/.test(text)) writePercentage(cell, Number(text));
                     input.remove(); numberButton.hidden = false; refresh();
                     schedulePercentageClose();
                 };
@@ -2211,7 +2211,7 @@
             if (percentageStepper === cell) { schedulePercentageClose(); return; }
             closePercentageStepper();
             if (!isEditing && !savingInProgress && fieldType === 'value' &&
-                /^\s*\d+(?:\.\d+)?\s*%/.test(cell.closest('tr').dataset.value || '')) {
+                /^\s*-?\d+(?:\.\d+)?\s*%/.test(cell.closest('tr').dataset.value || '')) {
                 openPercentageStepper(cell);
                 return;
             }
