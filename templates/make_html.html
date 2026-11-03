@@ -2147,9 +2147,9 @@
             table.appendChild(copy); ghost.appendChild(table); document.body.appendChild(ghost);
             deleteRow(row);
             const animation = ghost.animate([
-                {transform:'translateX(0)', opacity:0.8},
+                {transform:'translateX(0)', opacity:1},
                 {transform:'translateX(' + direction * rect.width + 'px)', opacity:0}
-            ], {duration:220, easing:'cubic-bezier(.22,.61,.36,1)', fill:'forwards'});
+            ], {duration:260, easing:'cubic-bezier(.2,.75,.25,1)', fill:'forwards'});
             animation.onfinish = () => ghost.remove();
             animation.oncancel = () => ghost.remove();
             visibleRows.forEach(({item, top}) => {
@@ -2158,7 +2158,7 @@
                 const delta = top - item.getBoundingClientRect().top;
                 if (Math.abs(delta) > 1) swipeShiftAnimations.set(item, item.animate([
                     {transform:'translateY(' + delta + 'px)'}, {transform:'translateY(0)'}
-                ], {duration:220, easing:'cubic-bezier(.22,.61,.36,1)'}));
+                ], {duration:260, easing:'cubic-bezier(.2,.75,.25,1)'}));
             });
         }
 
@@ -2167,6 +2167,16 @@
             if (body.dataset.swipeReady) return;
             body.dataset.swipeReady = '1';
             let gesture = null;
+            let dragFrame = null;
+            function paintDrag() {
+                dragFrame = null;
+                if (!gesture) return;
+                gesture.row.style.transform = 'translate3d(' + gesture.dx + 'px, 0, 0)';
+            }
+            function flushDrag() {
+                if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+                paintDrag();
+            }
             let suppressClickUntil = 0;
             const enabled = () => document.getElementById('enableSwipeDelete').checked;
             body.addEventListener('touchstart', event => {
@@ -2190,11 +2200,15 @@
                 if (!gesture.horizontal) return;
                 event.preventDefault();
                 gesture.dx = dx;
-                gesture.row.style.transform = 'translateX(' + dx + 'px)';
-                gesture.row.style.opacity = Math.abs(dx) >= 100 ? '0.45' : '0.8';
+                if (dragFrame === null) dragFrame = requestAnimationFrame(paintDrag);
             }, {passive:false});
             function reset() {
-                if (gesture) { gesture.row.style.transition = 'transform 180ms ease-out, opacity 180ms ease-out'; gesture.row.style.transform = ''; gesture.row.style.opacity = ''; }
+                if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+                dragFrame = null;
+                if (gesture) {
+                    gesture.row.style.transition = 'transform 240ms cubic-bezier(.2,.75,.25,1)';
+                    gesture.row.style.transform = '';
+                }
                 gesture = null;
             }
             window.addEventListener('touchend', event => {
@@ -2206,7 +2220,11 @@
                 const remove = enabled() && gesture.horizontal && Math.abs(gesture.dx) >= 100;
                 if (gesture.horizontal) suppressClickUntil = Date.now() + 500;
                 const direction = gesture.dx < 0 ? -1 : 1;
-                if (remove) { gesture = null; animateSwipeDeletion(row, direction); }
+                if (remove) {
+                    flushDrag();
+                    gesture = null;
+                    animateSwipeDeletion(row, direction);
+                }
                 else reset();
             }, true);
             window.addEventListener('touchcancel', reset, true);
