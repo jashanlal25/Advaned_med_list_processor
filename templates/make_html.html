@@ -2115,6 +2115,7 @@
         window.addEventListener('resize', positionPercentagePanel);
         if (window.visualViewport) window.visualViewport.addEventListener('resize', positionPercentagePanel);
 
+        const swipeShiftAnimations = new WeakMap();
         function animateSwipeDeletion(row, direction) {
             const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             if (reduced || !row.animate) { deleteRow(row); return; }
@@ -2153,10 +2154,11 @@
             animation.oncancel = () => ghost.remove();
             visibleRows.forEach(({item, top}) => {
                 if (!item.isConnected) return;
+                swipeShiftAnimations.get(item)?.cancel();
                 const delta = top - item.getBoundingClientRect().top;
-                if (Math.abs(delta) > 1) item.animate([
+                if (Math.abs(delta) > 1) swipeShiftAnimations.set(item, item.animate([
                     {transform:'translateY(' + delta + 'px)'}, {transform:'translateY(0)'}
-                ], {duration:220, easing:'cubic-bezier(.22,.61,.36,1)'});
+                ], {duration:220, easing:'cubic-bezier(.22,.61,.36,1)'}));
             });
         }
 
@@ -2168,12 +2170,15 @@
             let suppressClickUntil = 0;
             const enabled = () => document.getElementById('enableSwipeDelete').checked;
             body.addEventListener('touchstart', event => {
+                reset();
+                suppressClickUntil = 0;
                 if (!enabled() || event.touches.length !== 1 || isEditing || event.target.closest('button,input')) return;
                 const row = event.target.closest('tr.item-row');
                 if (!row) return;
                 closePercentageStepper();
+                swipeShiftAnimations.get(row)?.cancel();
                 row.style.transition = 'none';
-                gesture = {row, x:event.touches[0].clientX, y:event.touches[0].clientY, dx:0, horizontal:false};
+                gesture = {row, id:event.touches[0].identifier, x:event.touches[0].clientX, y:event.touches[0].clientY, dx:0, horizontal:false};
             }, {passive:true});
             body.addEventListener('touchmove', event => {
                 if (!gesture) return;
@@ -2185,23 +2190,28 @@
                 if (!gesture.horizontal) return;
                 event.preventDefault();
                 gesture.dx = dx;
-                gesture.row.style.transform = 'translateX(' + Math.max(-120, Math.min(120, dx)) + 'px)';
+                gesture.row.style.transform = 'translateX(' + dx + 'px)';
                 gesture.row.style.opacity = Math.abs(dx) >= 100 ? '0.45' : '0.8';
             }, {passive:false});
             function reset() {
                 if (gesture) { gesture.row.style.transition = 'transform 180ms ease-out, opacity 180ms ease-out'; gesture.row.style.transform = ''; gesture.row.style.opacity = ''; }
                 gesture = null;
             }
-            body.addEventListener('touchend', () => {
+            window.addEventListener('touchend', event => {
                 if (!gesture) return;
+                const touch = Array.from(event.changedTouches).find(item => item.identifier === gesture.id);
+                if (!touch) return;
+                if (gesture.horizontal) gesture.dx = touch.clientX - gesture.x;
                 const row = gesture.row;
                 const remove = enabled() && gesture.horizontal && Math.abs(gesture.dx) >= 100;
                 if (gesture.horizontal) suppressClickUntil = Date.now() + 500;
                 const direction = gesture.dx < 0 ? -1 : 1;
                 if (remove) { gesture = null; animateSwipeDeletion(row, direction); }
                 else reset();
-            });
-            body.addEventListener('touchcancel', reset);
+            }, true);
+            window.addEventListener('touchcancel', reset, true);
+            window.addEventListener('blur', reset);
+            document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
             body.addEventListener('click', event => {
                 if (Date.now() < suppressClickUntil) { event.preventDefault(); event.stopImmediatePropagation(); }
             }, true);
