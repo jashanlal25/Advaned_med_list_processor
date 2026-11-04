@@ -933,6 +933,11 @@
                     <button type="button" onclick="undoLastDelete()">↶ Undo</button>
                 </div>
 
+                <details id="removedItemsPanel" hidden style="margin-top:12px; color:var(--text-primary);">
+                    <summary id="removedItemsCount" style="cursor:pointer; padding:8px 0; font-weight:600;">Removed items (0)</summary>
+                    <ul id="removedItemsList" style="list-style:none; margin:0; padding:0; max-height:260px; overflow:auto;"></ul>
+                </details>
+
                 <div class="item-count" id="itemCount">0 items</div>
 
             <div class="actions" style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
@@ -1359,6 +1364,7 @@
         }
 
         function uploadNew() {
+            clearRemovedItems();
             uploadSection.style.display = 'block';
             editorSection.style.display = 'none';
             editorTextarea.value = '';
@@ -2377,6 +2383,7 @@
 
         // Keep the exact raw line and its position so Undo also works for items
         // with identical names or values.
+        const removedItems = [];
         let lastDeletedItem = null;
         let undoDeleteTimer = null;
 
@@ -2388,7 +2395,9 @@
             const lines = textarea.value.split('\n');
             if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= lines.length) return;
 
-            lastDeletedItem = { lineIndex, line: lines[lineIndex] };
+            lastDeletedItem = { lineIndex, line: lines[lineIndex], name: itemName, value: row.dataset.value || '' };
+            removedItems.unshift(lastDeletedItem);
+            renderRemovedItems();
             lines.splice(lineIndex, 1);
             textarea.value = lines.join('\n');
             updateItemCount();
@@ -2419,17 +2428,57 @@
             }, 10000);
         }
 
-        function undoLastDelete() {
-            if (!lastDeletedItem) return;
-            const textarea = document.getElementById('editorTextarea');
-            const lines = textarea.value ? textarea.value.split('\n') : [];
-            lines.splice(Math.min(lastDeletedItem.lineIndex, lines.length), 0, lastDeletedItem.line);
-            textarea.value = lines.join('\n');
+        function renderRemovedItems() {
+            const panel = document.getElementById('removedItemsPanel');
+            panel.hidden = removedItems.length === 0;
+            document.getElementById('removedItemsCount').textContent = 'Removed items (' + removedItems.length + ')';
+            const list = document.getElementById('removedItemsList');
+            list.replaceChildren();
+            for (const item of removedItems) {
+                const entry = document.createElement('li');
+                entry.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 0;';
+                const description = document.createElement('span');
+                description.textContent = item.value ? item.name + ' · ' + item.value : item.name;
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'btn btn-small';
+                button.textContent = 'Restore';
+                button.setAttribute('aria-label', 'Restore ' + description.textContent);
+                button.addEventListener('click', () => restoreRemovedItem(item));
+                entry.append(description, button);
+                list.appendChild(entry);
+            }
+        }
+
+        function clearRemovedItems() {
+            removedItems.length = 0;
             lastDeletedItem = null;
             clearTimeout(undoDeleteTimer);
             document.getElementById('undoDeleteToast').classList.remove('show');
+            document.getElementById('removedItemsPanel').open = false;
+            renderRemovedItems();
+        }
+
+        function restoreRemovedItem(item) {
+            const index = removedItems.indexOf(item);
+            if (index < 0) return;
+            const textarea = document.getElementById('editorTextarea');
+            const lines = textarea.value ? textarea.value.split('\n') : [];
+            lines.splice(Math.min(item.lineIndex, lines.length), 0, item.line);
+            textarea.value = lines.join('\n');
+            removedItems.splice(index, 1);
+            if (lastDeletedItem === item) {
+                lastDeletedItem = null;
+                clearTimeout(undoDeleteTimer);
+                document.getElementById('undoDeleteToast').classList.remove('show');
+            }
+            renderRemovedItems();
             updateItemCount();
             updatePreview();
+        }
+
+        function undoLastDelete() {
+            if (lastDeletedItem) restoreRemovedItem(lastDeletedItem);
         }
 
         // Helper function to escape special regex characters
