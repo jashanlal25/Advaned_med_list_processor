@@ -149,6 +149,8 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
     results = []
 
     if new_format:
+        from encoded_rows import decode_item_rows
+        decode_item_rows(soup)
         # New format: <tr class="item-row"> with data-disc/data-bonus attributes .main
         items = soup.find_all("tr", class_="item-row")
         for item in items:
