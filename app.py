@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, jsonify, redirect, session
+from flask import Flask, render_template, request, send_file, jsonify, redirect, session, Response
 from werkzeug.utils import secure_filename
 import os
 import io
@@ -66,6 +66,19 @@ def decompress_if_needed(data):
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static'), static_url_path='/static')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+
+# The neutral trial alias is an order-PDF endpoint, not another app entry point.
+PDF_PUBLIC_HOST = 'q7m4x9p2.vercel.app'
+PDF_PUBLIC_ORIGIN = 'https://' + PDF_PUBLIC_HOST
+
+@app.before_request
+def restrict_neutral_pdf_host():
+    hostname = request.host.split(':', 1)[0].lower().rstrip('.')
+    if hostname == PDF_PUBLIC_HOST:
+        if request.path != '/order/pdf' or request.method != 'POST':
+            return Response('Not Found', status=404, mimetype='text/plain',
+                            headers={'Cache-Control': 'no-store'})
+
 
 from chatbot_bp import chatbot_bp
 app.register_blueprint(chatbot_bp)
@@ -1208,7 +1221,7 @@ def _generate_html_inner():
             template_path_new, items_extended, list_no, list_date, title, whatsapp_number, message,
             logo_data_url=logo_data_url or '', sort_order=sort_order,
             fresh_format=output_format == 'fresh',
-            pdf_url=request.url_root.rstrip('/') + '/order/pdf' if output_format == 'fresh' else ''
+            pdf_url=PDF_PUBLIC_ORIGIN + '/order/pdf' if output_format == 'fresh' else ''
         )
         if err_new:
             return jsonify({'error': err_new}), 500

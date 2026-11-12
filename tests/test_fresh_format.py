@@ -27,7 +27,7 @@ class FreshFormatTests(unittest.TestCase):
         self.assertEqual(len(fresh.select('.offline-blessing')), 1)
         self.assertNotIn('https://anas-system.com/bis.png', str(fresh))
         self.assertIn('Open in Edge Browser on iPhone and Chrome Browser on Android', fresh.get_text())
-        self.assertEqual(fresh.select_one('#pdfForm')['action'], 'http://localhost/order/pdf')
+        self.assertEqual(fresh.select_one('#pdfForm')['action'], 'https://q7m4x9p2.vercel.app/order/pdf')
         self.assertEqual(fresh.select_one('#shopTitle').text, 'TEST PHARMA')
         self.assertEqual(fresh.select_one('#waNumber')['value'], '923001234567')
         self.assertEqual(fresh_result['filename'], 'TEST_M42_fresh.htm')
