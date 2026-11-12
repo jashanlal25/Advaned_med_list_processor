@@ -214,3 +214,25 @@ table.table-fixed tbody td:nth-child(2){white-space:normal!important;overflow:vi
 .fresh-preview-scroll{overflow:auto;margin:12px 0}
 .fresh-order-preview table{width:100%;border-collapse:collapse}
 .fresh-order-preview th,.fresh-order-preview td{padding:8px;text-align:left;border-bottom:1px solid var(--border)}
+
+/* Fresh header guidance and order summary. */
+.fresh-browser-guide{padding:0 16px;border-bottom:1px solid var(--border)}
+.fresh-browser-guide p{margin:12px 0;padding:12px 16px;border:1px solid var(--border);border-radius:22px;background:var(--chip);color:var(--text);font-size:13px;line-height:1.5;font-weight:700}
+.fresh-browser-guide p[lang="ur"]{font-size:15px;line-height:1.9;font-weight:500}
+.table-fixed th:nth-child(5),.table-fixed .item-row td:nth-child(5),.fresh-order-preview .fresh-bonus{text-align:center}
+.fresh-preview-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.fresh-preview-head h2{margin:0;font-size:22px}
+.fresh-preview-scroll{max-width:100%;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.fresh-preview-scroll table{min-width:650px;table-layout:auto}
+.fresh-preview-scroll th{position:static;background:var(--company1);color:#fff;font-size:12px;white-space:nowrap}
+.fresh-preview-scroll td{font-size:13px;white-space:nowrap}
+.fresh-preview-scroll td.fresh-item{min-width:170px;max-width:280px;white-space:normal;overflow-wrap:anywhere}
+.fresh-code{font-family:Consolas,monospace;font-weight:700}
+.fresh-preview-summary{display:grid;grid-template-columns:1fr 2fr;gap:12px;margin:18px 0}
+.fresh-preview-count,.fresh-preview-total{display:flex;flex-direction:column;justify-content:center;gap:5px;border-radius:16px;padding:16px 20px}
+.fresh-preview-count{border:1px solid var(--border);background:var(--chip)}
+.fresh-preview-total{background:linear-gradient(120deg,var(--company1),var(--company2));color:#fff;box-shadow:0 8px 20px var(--glass-shade)}
+.fresh-preview-summary span{font-size:12px;font-weight:700;letter-spacing:.03em}
+.fresh-preview-summary strong{font-size:26px;line-height:1.2;font-variant-numeric:tabular-nums}
+.fresh-preview-pdf{width:100%;justify-content:center;min-height:44px}
+@media(max-width:480px){.fresh-order-preview{padding:14px}.fresh-preview-summary{gap:8px}.fresh-preview-count,.fresh-preview-total{padding:14px}.fresh-preview-summary strong{font-size:23px}}

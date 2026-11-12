@@ -686,8 +686,12 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
         # one offline text heading instead of adding a second heading.
         content = re.sub(r'<center>\s*<img[^>]+src="https://anas-system.com/bis.png"[^>]*>\s*</center>',
                          '', content, count=1)
+        guidance = ('<div class="fresh-browser-guide">'
+            '<p>Open in Edge Browser on iPhone and Chrome Browser on Android for best working.</p>'
+            '<p lang="ur" dir="rtl">بہتر کام کے لیے آئی فون میں ایج براؤزر اور اینڈرائیڈ میں کروم براؤزر میں کھولیں۔</p></div>')
+        content = content.replace('<div class="controls">', guidance + '<div class="controls">', 1)
         content = re.sub(r'<div class="hint">.*?</div>',
-            '<div class="hint">Open in Edge Browser on iPhone and Chrome Browser on Android for best working.</div>',
+            '<div class="hint">If buttons do not work in WhatsApp or a file viewer, open this file in your browser.</div>',
             content, count=1, flags=re.DOTALL)
         if pdf_url:
             content = content.replace('https://medlist-new.vercel.app/order/pdf', pdf_url)

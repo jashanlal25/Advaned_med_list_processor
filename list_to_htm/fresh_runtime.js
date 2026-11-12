@@ -87,17 +87,18 @@ var offerStorage = {
         if (!payload) return;
         var dialog = document.createElement('dialog');
         dialog.className = 'fresh-order-preview';
-        var body = '<h2>Order Preview</h2><p>Customer: ' + escapeHtml(payload.customerName) +
+        var body = '<div class="fresh-preview-head"><h2>Order Preview</h2><button type="button" class="btn" data-close>Close</button></div><p>Customer: ' + escapeHtml(payload.customerName) +
           ' · List: ' + escapeHtml(String(payload.offerId)) + '</p><div class="fresh-preview-scroll"><table>' +
-          '<thead><tr><th>Item</th><th>Qty</th><th>Disc</th><th>Bonus</th><th>TP</th><th>Tax</th><th>Net</th></tr></thead><tbody>';
+          '<thead><tr><th>Code</th><th>Item</th><th>Qty</th><th>Disc</th><th class="fresh-bonus">Bonus</th><th>TP</th><th>Tax</th><th>Net</th></tr></thead><tbody>';
         payload.items.forEach(function(it){
-          body += '<tr><td>' + escapeHtml(toTitleCase(it.name)) + '</td><td>' + it.qty + '</td><td>' +
-            fmt2(it.disc) + '%' + escapeHtml(it.discSuffix) + '</td><td>' + escapeHtml(it.bonus) + '</td><td>' +
+          body += '<tr><td class="fresh-code">' + escapeHtml(it.code) + '</td><td class="fresh-item">' + escapeHtml(toTitleCase(it.name)) + '</td><td>' + it.qty + '</td><td>' +
+            fmt2(it.disc) + '%' + escapeHtml(it.discSuffix) + '</td><td class="fresh-bonus">' + escapeHtml(it.bonus) + '</td><td>' +
             fmt2(it.tp) + '</td><td>' + fmt2(it.tax) + '</td><td>' + fmt2(it.lineNet) + '</td></tr>';
         });
-        dialog.innerHTML = body + '</tbody></table></div><p>Items: ' + payload.totalItems + ' · Net: ' +
-          fmt2(payload.netTotal) + '</p><button type="button" class="btn" data-pdf>PDF Order</button> ' +
-          '<button type="button" class="btn" data-close>Close</button>';
+        dialog.innerHTML = body + '</tbody></table></div><div class="fresh-preview-summary">' +
+          '<div class="fresh-preview-count"><span>Selected items</span><strong>' + payload.totalItems + '</strong></div>' +
+          '<div class="fresh-preview-total"><span>Net total</span><strong>' + fmt2(payload.netTotal) + '</strong></div></div>' +
+          '<button type="button" class="btn fresh-preview-pdf" data-pdf>📄 PDF Order</button>';
         dialog.querySelector('[data-pdf]').onclick = function(){ window.localPdf(); };
         dialog.querySelector('[data-close]').onclick = function(){ dialog.close(); };
         dialog.addEventListener('close', function(){ dialog.remove(); });

@@ -12,8 +12,9 @@ import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from xml.sax.saxutils import escape
+from html import escape as html_escape
 
-from flask import Blueprint, Response, request, send_file
+from flask import Blueprint, Response, request, send_file, url_for
 
 order_pdf = Blueprint('order_pdf', __name__)
 
@@ -133,10 +134,14 @@ def _pdf(payload):
     return buf
 
 
-def _share_page(pdf_bytes, filename):
+def _share_page(pdf_bytes, filename, payload):
     """Give mobile browsers explicit share and download actions for one PDF."""
     encoded = base64.b64encode(pdf_bytes).decode('ascii')
     safe_name = json.dumps(filename)
+    # A direct PDF response avoids Android's embedded blob-viewer Open button.
+    # Carry the order in the form so Vercel needs no instance-local file/cache.
+    safe_payload = html_escape(json.dumps(payload), quote=True)
+    pdf_action = html_escape(url_for('order_pdf.export_order_pdf'), quote=True)
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MedList PDF Order</title>
@@ -147,9 +152,13 @@ h1{{font-size:18px;margin:0 0 4px}}p{{margin:0;color:#596679;font-size:13px}}
 .viewer{{height:calc(100dvh - 185px);min-height:320px;background:#20242b;border-radius:12px;overflow:hidden}}
 iframe{{width:100%;height:100%;border:0}}.actions{{display:flex;gap:8px;margin-top:10px}}
 button{{flex:1;border:0;border-radius:9px;color:white;padding:15px 8px;font-size:15px;font-weight:700;background:#16a34a}}
-button+button{{background:#2168ee}}#message{{min-height:20px;margin-top:8px;text-align:center}}
+button+button{{background:#2168ee}}.pdf-open{{display:flex;gap:8px;align-items:center;margin-bottom:12px}}.pdf-open form{{flex:1}}.pdf-open button{{width:100%;background:#143b85;min-height:46px}}.pdf-mobile p{{color:#c6d3ea;margin-top:8px}}.pdf-mobile{{display:none;padding:28px;text-align:center;color:#fff}}@media(max-width:767px){{.viewer{{height:auto;min-height:0}}.viewer iframe{{display:none}}.pdf-mobile{{display:block}}}}#message{{min-height:20px;margin-top:8px;text-align:center}}
 </style></head><body><main><header><h1>MedList PDF Order</h1><p>Preview, share, or download your PDF.</p></header>
-<div class="viewer"><iframe id="preview" title="Order PDF preview"></iframe></div>
+<div class="pdf-open"><form method="post" action="{pdf_action}">
+<input type="hidden" name="payload" value="{safe_payload}"><input type="hidden" name="pdf_action" value="open">
+<button type="submit" id="openPdf">Open PDF</button></form></div>
+<div class="viewer"><iframe id="preview" title="Order PDF preview"></iframe><div class="pdf-mobile"><strong>Your PDF is ready</strong><p>Use Open PDF to view the bill, or share or download it below.</p></div></div>
+<form id="downloadForm" method="post" action="{pdf_action}" hidden><input type="hidden" name="payload" value="{safe_payload}"><input type="hidden" name="pdf_action" value="download"></form>
 <div class="actions"><button id="share" type="button">Share PDF</button><button id="download" type="button">Download PDF</button></div>
 <p id="message" role="status"></p></main>
 <script>
@@ -162,8 +171,7 @@ const url=URL.createObjectURL(pdf);
 document.getElementById('preview').src=url;
 const message=document.getElementById('message');
 document.getElementById('download').onclick=()=>{{
-  const link=document.createElement('a');link.href=url;link.download=name;
-  document.body.appendChild(link);link.click();link.remove();
+  document.getElementById('downloadForm').submit();
 }};
 document.getElementById('share').onclick=async()=>{{
   try{{
@@ -173,8 +181,7 @@ document.getElementById('share').onclick=async()=>{{
     await navigator.share({{files:[file],title:'MedList PDF Order'}});
   }}catch(error){{
     if(error.name==='AbortError')return;
-    message.textContent='Open the PDF preview and use your browser Share option.';
-    window.open(url,'_blank');
+    message.textContent='File sharing is unavailable here. Use Open PDF or Download PDF, then share from your PDF viewer.';
   }}
 }};
 </script></body></html>'''
@@ -198,10 +205,11 @@ def export_order_pdf():
     filename = f'{list_no}-order.pdf'
     # A form navigation gets the Anas-style actions. Existing fetch clients
     # still receive the PDF bytes directly for navigator.share().
-    if 'text/html' in request.headers.get('Accept', ''):
-        return Response(_share_page(buf.getvalue(), filename), mimetype='text/html',
+    if 'text/html' in request.headers.get('Accept', '') and request.form.get('pdf_action') not in ('open', 'download'):
+        return Response(_share_page(buf.getvalue(), filename, payload), mimetype='text/html',
                         headers={'Cache-Control': 'no-store'})
-    response = send_file(buf, mimetype='application/pdf', as_attachment=False,
+    response = send_file(buf, mimetype='application/pdf',
+                         as_attachment=request.form.get('pdf_action') == 'download',
                          download_name=filename)
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Cache-Control'] = 'no-store'
