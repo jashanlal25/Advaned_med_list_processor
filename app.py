@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, jsonify, redirect, session
+from flask import Flask, render_template, request, send_file, jsonify, redirect, session, Response
 from werkzeug.utils import secure_filename
 import os
 import io
@@ -66,6 +66,19 @@ def decompress_if_needed(data):
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static'), static_url_path='/static')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+
+# The neutral trial alias is an order-PDF endpoint, not another app entry point.
+PDF_PUBLIC_HOST = 'q7m4x9p2.vercel.app'
+PDF_PUBLIC_ORIGIN = 'https://' + PDF_PUBLIC_HOST
+
+@app.before_request
+def restrict_neutral_pdf_host():
+    hostname = request.host.split(':', 1)[0].lower().rstrip('.')
+    if hostname == PDF_PUBLIC_HOST:
+        if request.path != '/order/pdf' or request.method != 'POST':
+            return Response('Not Found', status=404, mimetype='text/plain',
+                            headers={'Cache-Control': 'no-store'})
+
 
 from chatbot_bp import chatbot_bp
 app.register_blueprint(chatbot_bp)
@@ -1121,14 +1134,14 @@ def _generate_html_inner():
     # Sanitise inputs that get embedded into generated HTML/JS
     list_no = re.sub(r'[^A-Za-z0-9\-_]', '', request.form.get('list_no', '000001'))[:20] or '000001'
     list_date = request.form.get('list_date', None)
-    title = re.sub(r'[<>"\'&]', '', request.form.get('title', 'S.S.D PHARMA'))[:80] or 'S.S.D PHARMA'
+    title = re.sub(r'[<>"\'&]', '', request.form.get('title', '')).strip()[:80]
     whatsapp_number = request.form.get('whatsapp_number', '923337068868')
     message = re.sub(r'<[^>]*>', '', request.form.get('message', ''))[:500]
     list_type = request.form.get('list_type', 'M')
     if list_type not in ('M', 'C'):
         list_type = 'M'
     output_format = request.form.get('output_format', 'old').lower()
-    if output_format not in ('old', 'new', 'both'):
+    if output_format not in ('old', 'new', 'fresh', 'both'):
         output_format = 'old'
     sort_order = request.form.get('sort_order', 'alpha')
     if sort_order not in ('alpha', 'net_then_discount'):
@@ -1191,7 +1204,8 @@ def _generate_html_inner():
         response_payload['old_file'] = _browser_result_payload(html_old)
 
     # ---- NEW format ----
-    if output_format in ('new', 'both'):
+    if output_format in ('new', 'fresh', 'both'):
+        result_kind = 'fresh' if output_format == 'fresh' else 'new'
         if not os.path.exists(template_path_new):
             return jsonify({'error': 'New-format template file not found'}), 500
         items_extended = parse_text_content_extended(text_content)
@@ -1205,20 +1219,23 @@ def _generate_html_inner():
             }), 400
         html_new, err_new = generate_html_new_format(
             template_path_new, items_extended, list_no, list_date, title, whatsapp_number, message,
-            logo_data_url=logo_data_url or '', sort_order=sort_order
+            logo_data_url=logo_data_url or '', sort_order=sort_order,
+            fresh_format=output_format == 'fresh',
+            pdf_url=PDF_PUBLIC_ORIGIN + '/order/pdf' if output_format == 'fresh' else ''
         )
         if err_new:
             return jsonify({'error': err_new}), 500
-        new_filename = f"{title_prefix}_{list_type}{list_no}_new.htm"
+        new_filename = f"{title_prefix}_{list_type}{list_no}_{result_kind}.htm"
         new_token = _store_result({
             'content': html_new, 'filename': new_filename, 'count': len(items_extended),
         })
-        response_payload['new_filename'] = new_filename
-        response_payload['new_token'] = new_token
-        response_payload['new_file'] = _browser_result_payload(html_new)
+        response_payload[f'{result_kind}_filename'] = new_filename
+        response_payload[f'{result_kind}_token'] = new_token
+        response_payload[f'{result_kind}_file'] = _browser_result_payload(html_new)
 
     response_payload['filename'] = (
         response_payload.get('old_filename') or response_payload.get('new_filename')
+        or response_payload.get('fresh_filename')
     )
     response_payload['message'] = f'Generated {output_format} format with {len(data_items)} items'
     return jsonify(response_payload)

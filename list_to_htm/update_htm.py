@@ -566,7 +566,7 @@ def _new_format_rate_sort_key(item):
 
 def generate_html_new_format(template_path, items_extended, list_no="000001",
                              list_date=None, title="ANAS SYSTEM", whatsapp_number="923337068868",
-                             message="", logo_data_url="", sort_order="alpha"):
+                             message="", logo_data_url="", sort_order="alpha", fresh_format=False, pdf_url=""):
     """Generate a new-format HTML offer list.
 
     items_extended: list of dicts with keys name, value, code, tp, bonus, tax.
@@ -636,6 +636,10 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
     # Shop title — OFFLINE_META.shopTitle JS value
     content = re.sub(r'shopTitle:\s*"[^"]*"', f'shopTitle: "{title}"', content)
 
+    # An intentionally blank company name must stay blank after DOM init.
+    content = content.replace('OFFLINE_META.shopTitle || "ANAS SYSTEM"',
+                              'OFFLINE_META.shopTitle || ""')
+
     # Shop title — <h1 class="shopname"> HTML element
     content = re.sub(r'(<h1[^>]*class="shopname"[^>]*>)[^<]*(</h1>)',
                      lambda m: m.group(1) + title + m.group(2), content)
@@ -673,6 +677,51 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
 
     # WhatsApp number — both the hidden input and the JS fallback use the same string.
     content = content.replace('+03112127664 ', whatsapp_number)
+
+    if fresh_format:
+        # Reuse the established order payload and export code with an embedded UI runtime.
+        from pathlib import Path
+        css = Path(__file__).with_name('fresh_format.css').read_text(encoding='utf-8')
+        runtime = Path(__file__).with_name('fresh_runtime.js').read_text(encoding='utf-8')
+        content = content.replace('localStorage.', 'offerStorage.')
+        content = content.replace('<script src="https://anas-system.com/anassystemnewoffer.js"></script>',
+                                  '<script>' + runtime + '</script>', 1)
+        # The original template already has a Bismillah image. Replace it with
+        # one offline text heading instead of adding a second heading.
+        content = re.sub(r'<center>\s*<img[^>]+src="https://anas-system.com/bis.png"[^>]*>\s*</center>',
+                         '', content, count=1)
+        guidance = ('<div class="fresh-browser-guide">'
+            '<p>Open in Edge Browser on iPhone and Chrome Browser on Android for best working.</p>'
+            '<p lang="ur" dir="rtl">بہتر کام کے لیے آئی فون میں ایج براؤزر اور اینڈرائیڈ میں کروم براؤزر میں کھولیں۔</p></div>')
+        content = content.replace('<div class="controls">', guidance + '<div class="controls">', 1)
+        content = re.sub(r'<div class="hint">.*?</div>',
+            '<div class="hint">If buttons do not work in WhatsApp or a file viewer, open this file in your browser.</div>',
+            content, count=1, flags=re.DOTALL)
+        if pdf_url:
+            content = content.replace('https://medlist-new.vercel.app/order/pdf', pdf_url)
+        # Native dialogs make elements inert, but document touch listeners still
+        # see gestures. Keep the background order panel idle during preview.
+        modal_guard = "if (window.freshPreviewOpen) return;"
+        content = content.replace('function openOrderPanel(){',
+                                  'function openOrderPanel(){' + modal_guard, 1)
+        for event_name in ('touchstart', 'touchmove', 'touchend'):
+            marker = "document.addEventListener('" + event_name + "', function("
+            guard = "if (window.freshPreviewOpen) { swipeMode = null; return; }"
+            pattern = re.escape(marker) + r"([^)]*)\)\{"
+            content = re.sub(pattern, lambda m: m.group(0) + guard, content, count=1)
+
+
+        content = content.replace('<html lang="en"',
+                                  '<html data-theme-pack="sapphire" data-glass-depth="3d" lang="en"', 1)
+        content = content.replace('</head>', '<style>' + css + '</style></head>', 1)
+        content = content.replace('<div class="card">',
+            '<div class="card"><div class="offline-blessing" lang="ar" dir="rtl">'
+            'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ</div>', 1)
+        content = content.replace('<table class="table-fixed">',
+            '<div class="glass-deck"><div class="glass-deck-label">'
+            '<h2>Offer List</h2></div>'
+            '<div class="glass-optic" aria-hidden="true"></div></div>'
+            '<table class="table-fixed">', 1)
 
     return content, None
 
