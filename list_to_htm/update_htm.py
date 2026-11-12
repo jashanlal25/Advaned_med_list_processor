@@ -697,12 +697,12 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
             content = content.replace('https://medlist-new.vercel.app/order/pdf', pdf_url)
         # Native dialogs make elements inert, but document touch listeners still
         # see gestures. Keep the background order panel idle during preview.
-        modal_guard = "if (document.querySelector('.fresh-order-preview[open]')) return;"
+        modal_guard = "if (window.freshPreviewOpen) return;"
         content = content.replace('function openOrderPanel(){',
                                   'function openOrderPanel(){' + modal_guard, 1)
         for event_name in ('touchstart', 'touchmove', 'touchend'):
             marker = "document.addEventListener('" + event_name + "', function("
-            guard = "if (document.querySelector('.fresh-order-preview[open]')) { swipeMode = null; return; }"
+            guard = "if (window.freshPreviewOpen) { swipeMode = null; return; }"
             pattern = re.escape(marker) + r"([^)]*)\)\{"
             content = re.sub(pattern, lambda m: m.group(0) + guard, content, count=1)
 

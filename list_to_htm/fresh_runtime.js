@@ -15,30 +15,47 @@ var offerStorage = {
   }
   try { draft = JSON.parse(offerStorage.getItem(LS_KEY_QTY) || '{}') || {}; } catch(e){}
 
-  function recalc(){
-    var count = 0, net = 0;
-    rows.forEach(function(row){
-      var qty = parseInt(row.querySelector('.qty-input').value, 10) || 0;
-      if (qty <= 0) return;
-      count++;
-      net += qty * toNum(row.dataset.tp) * (1 - toNum(row.dataset.disc) / 100) + qty * toNum(row.dataset.tax);
-    });
+  var entries = rows.map(function(row){
+    return {row:row, input:row.querySelector('.qty-input'), qty:0,
+      unitNet:toNum(row.dataset.tp) * (1 - toNum(row.dataset.disc) / 100) + toNum(row.dataset.tax)};
+  });
+  var selectedCount = 0, netTotal = 0, saveTimer;
+  function renderTotals(){
     elTotalAll.textContent = String(rows.length);
-    elTotalSel.textContent = String(count);
-    elNetTotal.textContent = fmt2(net);
+    elTotalSel.textContent = String(selectedCount);
+    elNetTotal.textContent = fmt2(netTotal);
     if (typeof syncPanelData === 'function') syncPanelData();
   }
-  rows.forEach(function(row){
-    var input = row.querySelector('.qty-input');
+  function recalc(){
+    selectedCount = 0; netTotal = 0;
+    entries.forEach(function(entry){
+      entry.qty = Math.max(0, parseInt(entry.input.value, 10) || 0);
+      if (entry.qty) selectedCount++;
+      netTotal += entry.qty * entry.unitNet;
+    });
+    renderTotals();
+  }
+  function saveDraft(){
+    clearTimeout(saveTimer); saveTimer = null;
+    offerStorage.setItem(LS_KEY_QTY, JSON.stringify(draft));
+    offerStorage.setItem(LS_KEY_QTY + ':ts', String(Date.now()));
+  }
+  window.addEventListener('pagehide', function(){ if (saveTimer) saveDraft(); });
+  document.addEventListener('visibilitychange', function(){ if (document.hidden && saveTimer) saveDraft(); });
+  entries.forEach(function(entry){
+    var row = entry.row, input = entry.input;
     if (draft[row.dataset.id]) input.value = draft[row.dataset.id];
     input.addEventListener('input', function(){
       var qty = Math.max(0, Math.min(5000, parseInt(input.value, 10) || 0));
       input.value = qty || '';
       if (qty) draft[row.dataset.id] = qty;
       else delete draft[row.dataset.id];
-      offerStorage.setItem(LS_KEY_QTY, JSON.stringify(draft));
-      offerStorage.setItem(LS_KEY_QTY + ':ts', String(Date.now()));
-      recalc();
+      selectedCount += Number(qty > 0) - Number(entry.qty > 0);
+      netTotal += (qty - entry.qty) * entry.unitNet;
+      entry.qty = qty;
+      renderTotals();
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveDraft, 150);
     });
   });
   live.addEventListener('input', function(){
@@ -57,6 +74,7 @@ var offerStorage = {
   });
   document.getElementById('resetBtn').addEventListener('click', function(){
     if (!confirm('Reset all quantities?')) return;
+    clearTimeout(saveTimer); saveTimer = null;
     draft = {};
     rows.forEach(function(row){ row.querySelector('.qty-input').value = ''; });
     offerStorage.removeItem(LS_KEY_QTY);
@@ -101,17 +119,29 @@ var offerStorage = {
           '<div class="fresh-preview-actions"><button type="button" class="btn fresh-preview-pdf" data-pdf>📄 PDF Order</button>' +
           '<button type="button" class="btn fresh-preview-close" data-close>Close</button></div>';
         dialog.querySelector('[data-pdf]').onclick = function(){ window.localPdf(); };
-        dialog.querySelector('[data-close]').onclick = function(){ dialog.close(); };
+        var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        dialog.querySelector('[data-close]').onclick = function(){
+          if (!dialog.animate || reduceMotion) { dialog.close(); return; }
+          this.disabled = true;
+          dialog.animate([{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(4px)'}],
+                         {duration:90,easing:'ease-out',fill:'forwards'}).finished.then(function(){ dialog.close(); });
+        };
         var savedOverflow = document.documentElement.style.overflow;
         dialog.addEventListener('close', function(){
+          window.freshPreviewOpen = false;
           document.documentElement.style.overflow = savedOverflow;
           dialog.remove();
-          button.focus();
+          button.focus({preventScroll:true});
         });
         document.body.appendChild(dialog);
         if (typeof closeOrderPanel === 'function') closeOrderPanel();
         dialog.showModal();
+        window.freshPreviewOpen = true;
         document.documentElement.style.overflow = 'hidden';
+        if (dialog.animate && !reduceMotion) {
+          dialog.animate([{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],
+                         {duration:130,easing:'ease-out'});
+        }
       });
     });
   });
