@@ -210,7 +210,7 @@ table.table-fixed tbody td:nth-child(2){white-space:normal!important;overflow:vi
   
 
 .fresh-order-preview{width:min(96vw,900px);max-height:90dvh;overflow:auto;padding:18px;border:1px solid var(--border);border-radius:16px;background:var(--panelSolid);color:var(--text)}
-.fresh-order-preview::backdrop{background:#0008}
+.fresh-order-preview::backdrop{background:#0008;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .fresh-preview-scroll{overflow:auto;margin:12px 0}
 .fresh-order-preview table{width:100%;border-collapse:collapse}
 .fresh-order-preview th,.fresh-order-preview td{padding:8px;text-align:left;border-bottom:1px solid var(--border)}

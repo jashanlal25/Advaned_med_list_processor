@@ -18,6 +18,9 @@ class OrderPdfActionTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         soup = BeautifulSoup(page.data, 'html.parser')
         self.assertIsNotNone(soup.select_one('#openPdf'))
+        self.assertEqual(soup.h1.text, 'Test & Co — PDF Order')
+        self.assertEqual(soup.title.text, 'Test & Co — PDF Order')
+        self.assertNotIn('MedList PDF Order', page.get_data(as_text=True))
         for action in ('open', 'download'):
             control = soup.select_one(f'input[name="pdf_action"][value="{action}"]')
             form = control.find_parent('form')

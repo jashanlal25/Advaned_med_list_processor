@@ -127,11 +127,13 @@ var offerStorage = {
                          {duration:90,easing:'ease-out',fill:'forwards'}).finished.then(function(){ dialog.close(); });
         };
         var savedOverflow = document.documentElement.style.overflow;
+        var savedScrollX = window.scrollX, savedScrollY = window.scrollY;
         dialog.addEventListener('close', function(){
           window.freshPreviewOpen = false;
           document.documentElement.style.overflow = savedOverflow;
           dialog.remove();
           button.focus({preventScroll:true});
+          window.scrollTo(savedScrollX, savedScrollY);
         });
         document.body.appendChild(dialog);
         if (typeof closeOrderPanel === 'function') closeOrderPanel();

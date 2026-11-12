@@ -68,7 +68,7 @@ def _pdf(payload):
     center = ParagraphStyle('center', parent=normal, alignment=TA_CENTER)
     par = lambda value, style=normal: Paragraph(escape(_text(value)), style)
 
-    title = _text(payload.get('shopTitle')) or 'MedList Order'
+    title = _text(payload.get('shopTitle')) or 'Order'
     date = datetime.now(ZoneInfo('Asia/Karachi')).strftime('%Y-%m-%d %H:%M')
     story = [par(title, heading), par('Date: ' + date),
              par('Name: ' + (_text(payload.get('customerName')) or '—'), bold),
@@ -138,13 +138,17 @@ def _share_page(pdf_bytes, filename, payload):
     """Give mobile browsers explicit share and download actions for one PDF."""
     encoded = base64.b64encode(pdf_bytes).decode('ascii')
     safe_name = json.dumps(filename)
+    business = _text(payload.get('shopTitle'))
+    page_title = business + ' — PDF Order' if business else 'PDF Order'
+    safe_title = html_escape(page_title, quote=True)
+    share_title = json.dumps(page_title).replace('<', '\\u003c')
     # A direct PDF response avoids Android's embedded blob-viewer Open button.
     # Carry the order in the form so Vercel needs no instance-local file/cache.
     safe_payload = html_escape(json.dumps(payload), quote=True)
     pdf_action = html_escape(url_for('order_pdf.export_order_pdf'), quote=True)
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MedList PDF Order</title>
+<title>{safe_title}</title>
 <style>
 *{{box-sizing:border-box}}body{{margin:0;font:15px system-ui,Arial,sans-serif;background:#f3f5f9;color:#172238}}
 main{{max-width:900px;margin:auto;padding:12px}}header{{background:#fff;border-radius:12px;padding:15px;margin-bottom:10px}}
@@ -153,7 +157,7 @@ h1{{font-size:18px;margin:0 0 4px}}p{{margin:0;color:#596679;font-size:13px}}
 iframe{{width:100%;height:100%;border:0}}.actions{{display:flex;gap:8px;margin-top:10px}}
 button{{flex:1;border:0;border-radius:9px;color:white;padding:15px 8px;font-size:15px;font-weight:700;background:#16a34a}}
 button+button{{background:#2168ee}}.pdf-open{{display:flex;gap:8px;align-items:center;margin-bottom:12px}}.pdf-open form{{flex:1}}.pdf-open button{{width:100%;background:#143b85;min-height:46px}}.pdf-mobile p{{color:#c6d3ea;margin-top:8px}}.pdf-mobile{{display:none;padding:28px;text-align:center;color:#fff}}@media(max-width:767px){{.viewer{{height:auto;min-height:0}}.viewer iframe{{display:none}}.pdf-mobile{{display:block}}}}#message{{min-height:20px;margin-top:8px;text-align:center}}
-</style></head><body><main><header><h1>MedList PDF Order</h1><p>Preview, share, or download your PDF.</p></header>
+</style></head><body><main><header><h1>{safe_title}</h1><p>Preview, share, or download your PDF.</p></header>
 <div class="pdf-open"><form method="post" action="{pdf_action}">
 <input type="hidden" name="payload" value="{safe_payload}"><input type="hidden" name="pdf_action" value="open">
 <button type="submit" id="openPdf">Open PDF</button></form></div>
@@ -178,7 +182,7 @@ document.getElementById('share').onclick=async()=>{{
     const file=new File([pdf],name,{{type:'application/pdf'}});
     if(!navigator.share || (navigator.canShare && !navigator.canShare({{files:[file]}})))
       throw new Error('File sharing is unavailable in this browser');
-    await navigator.share({{files:[file],title:'MedList PDF Order'}});
+    await navigator.share({{files:[file],title:{share_title}}});
   }}catch(error){{
     if(error.name==='AbortError')return;
     message.textContent='File sharing is unavailable here. Use Open PDF or Download PDF, then share from your PDF viewer.';
