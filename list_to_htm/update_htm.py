@@ -566,7 +566,7 @@ def _new_format_rate_sort_key(item):
 
 def generate_html_new_format(template_path, items_extended, list_no="000001",
                              list_date=None, title="ANAS SYSTEM", whatsapp_number="923337068868",
-                             message="", logo_data_url="", sort_order="alpha", fresh_format=False):
+                             message="", logo_data_url="", sort_order="alpha", fresh_format=False, pdf_url=""):
     """Generate a new-format HTML offer list.
 
     items_extended: list of dicts with keys name, value, code, tp, bonus, tax.
@@ -675,9 +675,23 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
     content = content.replace('+03112127664 ', whatsapp_number)
 
     if fresh_format:
-        # Reuse the established offline engine; only the presentation changes.
+        # Reuse the established order payload and export code with an embedded UI runtime.
         from pathlib import Path
         css = Path(__file__).with_name('fresh_format.css').read_text(encoding='utf-8')
+        runtime = Path(__file__).with_name('fresh_runtime.js').read_text(encoding='utf-8')
+        content = content.replace('localStorage.', 'offerStorage.')
+        content = content.replace('<script src="https://anas-system.com/anassystemnewoffer.js"></script>',
+                                  '<script>' + runtime + '</script>', 1)
+        # The original template already has a Bismillah image. Replace it with
+        # one offline text heading instead of adding a second heading.
+        content = re.sub(r'<center>\s*<img[^>]+src="https://anas-system.com/bis.png"[^>]*>\s*</center>',
+                         '', content, count=1)
+        content = re.sub(r'<div class="hint">.*?</div>',
+            '<div class="hint">Open in Edge Browser on iPhone and Chrome Browser on Android for best working.</div>',
+            content, count=1, flags=re.DOTALL)
+        if pdf_url:
+            content = content.replace('https://medlist-new.vercel.app/order/pdf', pdf_url)
+
         content = content.replace('<html lang="en"',
                                   '<html data-theme-pack="sapphire" data-glass-depth="3d" lang="en"', 1)
         content = content.replace('</head>', '<style>' + css + '</style></head>', 1)

@@ -1757,7 +1757,7 @@
                 dialog = document.createElement('dialog');
                 dialog.id = 'generatedPreviewDialog';
                 dialog.style.cssText = 'inset:0;margin:auto;width:min(96vw,920px);max-width:none;height:min(92dvh,900px);max-height:none;padding:12px;border:0;border-radius:12px;background:#fff';
-                dialog.innerHTML = '<button type="button" style="padding:10px;margin-bottom:8px" id="closeGeneratedPreview">Close preview</button><iframe title="Generated HTML preview" sandbox="allow-scripts" style="width:100%;height:calc(100% - 55px);border:1px solid #aaa"></iframe>';
+                dialog.innerHTML = '<button type="button" style="padding:10px;margin-bottom:8px" id="closeGeneratedPreview">Close preview</button><iframe title="Generated HTML preview" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals" style="width:100%;height:calc(100% - 55px);border:1px solid #aaa"></iframe>';
                 document.body.appendChild(dialog);
                 dialog.querySelector('#closeGeneratedPreview').onclick = () => dialog.close();
             }

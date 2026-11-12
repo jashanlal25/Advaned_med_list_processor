@@ -1207,7 +1207,8 @@ def _generate_html_inner():
         html_new, err_new = generate_html_new_format(
             template_path_new, items_extended, list_no, list_date, title, whatsapp_number, message,
             logo_data_url=logo_data_url or '', sort_order=sort_order,
-            fresh_format=output_format == 'fresh'
+            fresh_format=output_format == 'fresh',
+            pdf_url=request.url_root.rstrip('/') + '/order/pdf' if output_format == 'fresh' else ''
         )
         if err_new:
             return jsonify({'error': err_new}), 500
