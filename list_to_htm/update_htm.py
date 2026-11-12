@@ -566,7 +566,7 @@ def _new_format_rate_sort_key(item):
 
 def generate_html_new_format(template_path, items_extended, list_no="000001",
                              list_date=None, title="ANAS SYSTEM", whatsapp_number="923337068868",
-                             message="", logo_data_url="", sort_order="alpha"):
+                             message="", logo_data_url="", sort_order="alpha", fresh_format=False):
     """Generate a new-format HTML offer list.
 
     items_extended: list of dicts with keys name, value, code, tp, bonus, tax.
@@ -673,6 +673,22 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
 
     # WhatsApp number — both the hidden input and the JS fallback use the same string.
     content = content.replace('+03112127664 ', whatsapp_number)
+
+    if fresh_format:
+        # Reuse the established offline engine; only the presentation changes.
+        from pathlib import Path
+        css = Path(__file__).with_name('fresh_format.css').read_text(encoding='utf-8')
+        content = content.replace('<html lang="en"',
+                                  '<html data-theme-pack="sapphire" data-glass-depth="3d" lang="en"', 1)
+        content = content.replace('</head>', '<style>' + css + '</style></head>', 1)
+        content = content.replace('<div class="card">',
+            '<div class="card"><div class="offline-blessing" lang="ar" dir="rtl">'
+            'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ</div>', 1)
+        content = content.replace('<table class="table-fixed">',
+            '<div class="glass-deck"><div class="glass-deck-label">'
+            '<span>FRESH FORMAT</span><h2>Offer List</h2></div>'
+            '<div class="glass-optic" aria-hidden="true"></div></div>'
+            '<table class="table-fixed">', 1)
 
     return content, None
 

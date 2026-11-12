@@ -830,20 +830,23 @@
 
             <div class="form-group">
                 <label>Output Format</label>
-                <div class="list-type-toggle">
-                    <button type="button" class="list-type-btn active" id="btnFmtOld" onclick="selectOutputFormat('old')">
+                <div class="list-type-toggle" style="flex-wrap:wrap;">
+                    <button type="button" class="list-type-btn active" style="flex-basis:130px" id="btnFmtOld" onclick="selectOutputFormat('old')">
                         📜 Old Format
                     </button>
-                    <button type="button" class="list-type-btn" id="btnFmtNew" onclick="selectOutputFormat('new')">
+                    <button type="button" class="list-type-btn" style="flex-basis:130px" id="btnFmtNew" onclick="selectOutputFormat('new')">
                         ✨ New Format
                     </button>
-                    <button type="button" class="list-type-btn" id="btnFmtBoth" onclick="selectOutputFormat('both')">
-                        🧩 Both
+                    <button type="button" class="list-type-btn" style="flex-basis:130px" id="btnFmtFresh" onclick="selectOutputFormat('fresh')">
+                        💎 Fresh Format
+                    </button>
+                    <button type="button" class="list-type-btn" style="flex-basis:130px" id="btnFmtBoth" onclick="selectOutputFormat('both')">
+                        🧩 Both (Old + New)
                     </button>
                 </div>
                 <input type="hidden" id="output_format" name="output_format" value="old">
                 <div style="margin-top: 6px; font-size: 12px; color: var(--text-secondary);">
-                    New format requires Extended TXT (with tp|bonus|tax). Generate it from the home page.
+                    New and Fresh formats use Extended TXT (with tp|bonus|tax). Generate it from the home page.
                 </div>
             </div>
 
@@ -982,6 +985,11 @@
                     </button>
                     <button class="btn btn-primary" onclick="shareHTML('new')">📤 Share HTML (New)</button>
                 </div>
+                <div class="result-buttons" id="resultButtonsFresh" style="display:none;margin-top:8px;">
+                    <button class="btn btn-primary" onclick="previewGenerated('fresh')">👁️ Preview HTML (Fresh)</button>
+                    <button class="btn btn-success" onclick="downloadGenerated('fresh')">⬇️ Download HTML (Fresh)</button>
+                    <button class="btn btn-primary" onclick="shareHTML('fresh')">📤 Share HTML (Fresh)</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1078,6 +1086,7 @@
             document.getElementById('output_format').value = fmt;
             document.getElementById('btnFmtOld').classList.toggle('active', fmt === 'old');
             document.getElementById('btnFmtNew').classList.toggle('active', fmt === 'new');
+            document.getElementById('btnFmtFresh').classList.toggle('active', fmt === 'fresh');
             document.getElementById('btnFmtBoth').classList.toggle('active', fmt === 'both');
             updateFilenamePreview();
         }
@@ -1088,7 +1097,8 @@
             const fmt = document.getElementById('output_format').value;
             const old = `offer_list_${type}${listNo}.htm`;
             const neu = `offer_list_${type}${listNo}_new.htm`;
-            const preview = (fmt === 'new') ? neu
+            const preview = (fmt === 'fresh') ? `offer_list_${type}${listNo}_fresh.htm`
+                          : (fmt === 'new') ? neu
                           : (fmt === 'both') ? `${old} + ${neu}`
                           : old;
             document.getElementById('filenamePreview').textContent = preview;
@@ -1647,12 +1657,14 @@
 
                 const data = await response.json();
                 if (!response.ok || !data.success) throw new Error(data.error || 'Could not generate HTML');
-                const [oldHtml, newHtml] = await Promise.all([
-                    unpackGeneratedHTML(data.old_file), unpackGeneratedHTML(data.new_file)
+                const [oldHtml, newHtml, freshHtml] = await Promise.all([
+                    unpackGeneratedHTML(data.old_file), unpackGeneratedHTML(data.new_file),
+                    unpackGeneratedHTML(data.fresh_file)
                 ]);
                 window._generatedHTML = {
                     old: oldHtml ? {name: data.old_filename, html: oldHtml} : null,
-                    new: newHtml ? {name: data.new_filename, html: newHtml} : null
+                    new: newHtml ? {name: data.new_filename, html: newHtml} : null,
+                    fresh: freshHtml ? {name: data.fresh_filename, html: freshHtml} : null
                 };
 
                 loading.style.display = 'none';
@@ -1674,6 +1686,7 @@
                     resultMessage.innerHTML = `<strong>✓ Success!</strong> Generated HTML with ${data.count} items<br>${fileLine}`;
                     document.getElementById('resultButtonsOld').style.display = oldName ? 'flex' : 'none';
                     document.getElementById('resultButtonsNew').style.display = newName ? 'flex' : 'none';
+                    document.getElementById('resultButtonsFresh').style.display = data.fresh_filename ? 'flex' : 'none';
                 } else {
                     resultCard.className = 'result-card error';
                     const errNode = document.createElement('span');
@@ -1682,6 +1695,7 @@
                     resultMessage.appendChild(errNode);
                     document.getElementById('resultButtonsOld').style.display = 'none';
                     document.getElementById('resultButtonsNew').style.display = 'none';
+                    document.getElementById('resultButtonsFresh').style.display = 'none';
                 }
             } catch (error) {
                 loading.style.display = 'none';

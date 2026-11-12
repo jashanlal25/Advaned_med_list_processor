@@ -1128,7 +1128,7 @@ def _generate_html_inner():
     if list_type not in ('M', 'C'):
         list_type = 'M'
     output_format = request.form.get('output_format', 'old').lower()
-    if output_format not in ('old', 'new', 'both'):
+    if output_format not in ('old', 'new', 'fresh', 'both'):
         output_format = 'old'
     sort_order = request.form.get('sort_order', 'alpha')
     if sort_order not in ('alpha', 'net_then_discount'):
@@ -1191,7 +1191,8 @@ def _generate_html_inner():
         response_payload['old_file'] = _browser_result_payload(html_old)
 
     # ---- NEW format ----
-    if output_format in ('new', 'both'):
+    if output_format in ('new', 'fresh', 'both'):
+        result_kind = 'fresh' if output_format == 'fresh' else 'new'
         if not os.path.exists(template_path_new):
             return jsonify({'error': 'New-format template file not found'}), 500
         items_extended = parse_text_content_extended(text_content)
@@ -1205,20 +1206,22 @@ def _generate_html_inner():
             }), 400
         html_new, err_new = generate_html_new_format(
             template_path_new, items_extended, list_no, list_date, title, whatsapp_number, message,
-            logo_data_url=logo_data_url or '', sort_order=sort_order
+            logo_data_url=logo_data_url or '', sort_order=sort_order,
+            fresh_format=output_format == 'fresh'
         )
         if err_new:
             return jsonify({'error': err_new}), 500
-        new_filename = f"{title_prefix}_{list_type}{list_no}_new.htm"
+        new_filename = f"{title_prefix}_{list_type}{list_no}_{result_kind}.htm"
         new_token = _store_result({
             'content': html_new, 'filename': new_filename, 'count': len(items_extended),
         })
-        response_payload['new_filename'] = new_filename
-        response_payload['new_token'] = new_token
-        response_payload['new_file'] = _browser_result_payload(html_new)
+        response_payload[f'{result_kind}_filename'] = new_filename
+        response_payload[f'{result_kind}_token'] = new_token
+        response_payload[f'{result_kind}_file'] = _browser_result_payload(html_new)
 
     response_payload['filename'] = (
         response_payload.get('old_filename') or response_payload.get('new_filename')
+        or response_payload.get('fresh_filename')
     )
     response_payload['message'] = f'Generated {output_format} format with {len(data_items)} items'
     return jsonify(response_payload)
