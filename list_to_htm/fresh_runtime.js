@@ -87,7 +87,7 @@ var offerStorage = {
         if (!payload) return;
         var dialog = document.createElement('dialog');
         dialog.className = 'fresh-order-preview';
-        var body = '<div class="fresh-preview-head"><h2>Order Preview</h2><button type="button" class="btn" data-close>Close</button></div><p>Customer: ' + escapeHtml(payload.customerName) +
+        var body = '<div class="fresh-preview-head"><h2>Order Preview</h2><span class="fresh-preview-business">' + escapeHtml(payload.shopTitle) + '</span></div><p>Customer: ' + escapeHtml(payload.customerName) +
           ' · List: ' + escapeHtml(String(payload.offerId)) + '</p><div class="fresh-preview-scroll"><table>' +
           '<thead><tr><th>Code</th><th>Item</th><th>Qty</th><th>Disc</th><th class="fresh-bonus">Bonus</th><th>TP</th><th>Tax</th><th>Net</th></tr></thead><tbody>';
         payload.items.forEach(function(it){
@@ -98,12 +98,20 @@ var offerStorage = {
         dialog.innerHTML = body + '</tbody></table></div><div class="fresh-preview-summary">' +
           '<div class="fresh-preview-count"><span>Selected items</span><strong>' + payload.totalItems + '</strong></div>' +
           '<div class="fresh-preview-total"><span>Net total</span><strong>' + fmt2(payload.netTotal) + '</strong></div></div>' +
-          '<button type="button" class="btn fresh-preview-pdf" data-pdf>📄 PDF Order</button>';
+          '<div class="fresh-preview-actions"><button type="button" class="btn fresh-preview-pdf" data-pdf>📄 PDF Order</button>' +
+          '<button type="button" class="btn fresh-preview-close" data-close>Close</button></div>';
         dialog.querySelector('[data-pdf]').onclick = function(){ window.localPdf(); };
         dialog.querySelector('[data-close]').onclick = function(){ dialog.close(); };
-        dialog.addEventListener('close', function(){ dialog.remove(); });
+        var savedOverflow = document.documentElement.style.overflow;
+        dialog.addEventListener('close', function(){
+          document.documentElement.style.overflow = savedOverflow;
+          dialog.remove();
+          button.focus();
+        });
         document.body.appendChild(dialog);
+        if (typeof closeOrderPanel === 'function') closeOrderPanel();
         dialog.showModal();
+        document.documentElement.style.overflow = 'hidden';
       });
     });
   });

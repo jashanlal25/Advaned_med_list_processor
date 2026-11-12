@@ -249,3 +249,15 @@ table.table-fixed tbody td:nth-child(2){white-space:normal!important;overflow:vi
   .fresh-preview-scroll th:nth-child(7){width:8%}
   .fresh-preview-scroll th:nth-child(8){width:14%}
 }
+
+/* Dark sapphire: keep both price columns and controls consistent. */
+[data-theme-pack="sapphire"][data-theme="dark"]{
+  --themeButton:#173b85;--themeButtonText:#f3f7ff;
+  --glass-row:#0b1832;--glass-alt:#0b1832;--glass-rate:#2b416b;--glass-price:#d5e2f8;
+}
+[data-theme="dark"][data-glass-depth="3d"] .item-row td:nth-child(n+6){background-color:var(--glass-rate);color:var(--glass-price);font-weight:800}
+[data-theme="dark"][data-glass-depth="3d"] .table-fixed thead th:nth-child(n+6){background:linear-gradient(180deg,var(--glass-shine),transparent 65%),var(--thead)}
+.fresh-preview-business{max-width:48%;text-align:right;font-size:13px;font-weight:800;overflow-wrap:anywhere;color:var(--heading)}
+.fresh-preview-actions{position:sticky;bottom:-1px;display:flex;gap:8px;padding-top:10px;background:var(--panelSolid)}
+.fresh-preview-actions .fresh-preview-pdf{flex:2;width:auto}
+.fresh-preview-close{flex:1;justify-content:center;min-height:44px}

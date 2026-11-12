@@ -695,6 +695,17 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
             content, count=1, flags=re.DOTALL)
         if pdf_url:
             content = content.replace('https://medlist-new.vercel.app/order/pdf', pdf_url)
+        # Native dialogs make elements inert, but document touch listeners still
+        # see gestures. Keep the background order panel idle during preview.
+        modal_guard = "if (document.querySelector('.fresh-order-preview[open]')) return;"
+        content = content.replace('function openOrderPanel(){',
+                                  'function openOrderPanel(){' + modal_guard, 1)
+        for event_name in ('touchstart', 'touchmove', 'touchend'):
+            marker = "document.addEventListener('" + event_name + "', function("
+            guard = "if (document.querySelector('.fresh-order-preview[open]')) { swipeMode = null; return; }"
+            pattern = re.escape(marker) + r"([^)]*)\)\{"
+            content = re.sub(pattern, lambda m: m.group(0) + guard, content, count=1)
+
 
         content = content.replace('<html lang="en"',
                                   '<html data-theme-pack="sapphire" data-glass-depth="3d" lang="en"', 1)
@@ -704,7 +715,7 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
             'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ</div>', 1)
         content = content.replace('<table class="table-fixed">',
             '<div class="glass-deck"><div class="glass-deck-label">'
-            '<span>FRESH FORMAT</span><h2>Offer List</h2></div>'
+            '<h2>Offer List</h2></div>'
             '<div class="glass-optic" aria-hidden="true"></div></div>'
             '<table class="table-fixed">', 1)
 
