@@ -1121,7 +1121,7 @@ def _generate_html_inner():
     # Sanitise inputs that get embedded into generated HTML/JS
     list_no = re.sub(r'[^A-Za-z0-9\-_]', '', request.form.get('list_no', '000001'))[:20] or '000001'
     list_date = request.form.get('list_date', None)
-    title = re.sub(r'[<>"\'&]', '', request.form.get('title', 'S.S.D PHARMA'))[:80] or 'S.S.D PHARMA'
+    title = re.sub(r'[<>"\'&]', '', request.form.get('title', '')).strip()[:80]
     whatsapp_number = request.form.get('whatsapp_number', '923337068868')
     message = re.sub(r'<[^>]*>', '', request.form.get('message', ''))[:500]
     list_type = request.form.get('list_type', 'M')

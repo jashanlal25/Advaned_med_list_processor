@@ -636,6 +636,10 @@ def generate_html_new_format(template_path, items_extended, list_no="000001",
     # Shop title — OFFLINE_META.shopTitle JS value
     content = re.sub(r'shopTitle:\s*"[^"]*"', f'shopTitle: "{title}"', content)
 
+    # An intentionally blank company name must stay blank after DOM init.
+    content = content.replace('OFFLINE_META.shopTitle || "ANAS SYSTEM"',
+                              'OFFLINE_META.shopTitle || ""')
+
     # Shop title — <h1 class="shopname"> HTML element
     content = re.sub(r'(<h1[^>]*class="shopname"[^>]*>)[^<]*(</h1>)',
                      lambda m: m.group(1) + title + m.group(2), content)

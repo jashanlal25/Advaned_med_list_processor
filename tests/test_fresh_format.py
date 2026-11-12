@@ -36,6 +36,33 @@ class FreshFormatTests(unittest.TestCase):
         self.assertNotIn('ANAS SYSTEM (SHUMAIL)', fresh.get_text())
         self.assertNotIn('data-glass-depth', new.html.attrs)
 
+    def test_blank_business_name_stays_blank_in_all_formats(self):
+        for kind in ('old', 'new', 'fresh', 'both'):
+            for title in ('', '   '):
+                with self.subTest(kind=kind, title=title):
+                    response = app.test_client().post('/generate-html', data={
+                        'file': (io.BytesIO(b'Alpha----- 10%|100||0'), 'test.txt'),
+                        'output_format': kind, 'title': title,
+                    })
+                    self.assertEqual(response.status_code, 200)
+                    result = response.get_json()
+                    self.assertTrue(result['filename'].startswith('OFFER_LIST_'))
+                    formats = ('old', 'new') if kind == 'both' else (kind,)
+                    for fmt in formats:
+                        payload = result[fmt + '_file']
+                        if payload['encoding'] == 'utf8':
+                            html = payload['data']
+                        else:
+                            import gzip, base64
+                            html = gzip.decompress(base64.b64decode(payload['data'])).decode()
+                        self.assertNotIn('S.S.D PHARMA', html)
+                        self.assertNotIn('SSD MEDICOS', html)
+                        if fmt != 'old':
+                            doc = BeautifulSoup(html, 'html.parser')
+                            self.assertEqual(doc.select_one('#shopTitle').text, '')
+                            self.assertIn('shopTitle: ""', html)
+                            self.assertNotIn('shopTitle || "ANAS SYSTEM"', html)
+
     def test_pdf_export_from_fresh_payload(self):
         response = app.test_client().post('/order/pdf', data={
             'payload': '{"offerId":"42","shopTitle":"TEST","customerName":"Buyer","items":[{"name":"Alpha","qty":2,"tp":100,"disc":10,"discSuffix":",","bonus":"2+1","tax":1,"lineNet":182}],"netTotal":182}',
