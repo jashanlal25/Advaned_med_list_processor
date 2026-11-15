@@ -42,6 +42,13 @@ class EncodedRowsTest(unittest.TestCase):
         self.assertEqual(soup.select_one('tbody tr')['data-tp'], '535.50')
         self.assertEqual(soup.select_one('tbody td').text, 'Crème & Co')
 
+    def test_modern_map_can_index_chunks_in_output_order(self):
+        rows = '<tr class="item-row"><td>Test item</td></tr>'
+        html = wrapped_html(rows, modern=True).replace('[1,2,0]', '[2,0,1]')
+        soup = BeautifulSoup(html, 'html.parser')
+        decode_item_rows(soup)
+        self.assertEqual(soup.select_one('tbody td').text, 'Test item')
+
     def test_modern_invalid_map_and_checksum(self):
         html = wrapped_html('<tr><td>Item</td></tr>', modern=True)
         for damaged in (html.replace('[1,2,0]', '[1,1,0]'),
