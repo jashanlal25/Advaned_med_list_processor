@@ -36,22 +36,32 @@ def decode_item_rows(soup):
             if modern:
                 if len(key) != 32 or sorted(order) != list(range(len(chunks))):
                     raise ValueError('Invalid encoded item map')
-                arranged = [''] * len(chunks)
-                for chunk, position in zip(chunks, order):
-                    arranged[position] = chunk
-                chunks, order = arranged, list(range(len(arranged)))
                 seed = int(match[4])
                 stride, offset = ((seed >> 8) & 255) | 1, (seed >> 16) & 31
-            encoded = base64.b64decode(''.join(chunks[i] for i in order), validate=True)
-            previous = int(match[4]) & 255
-            decoded = bytearray()
-            digest = 2166136261
-            for index, value in enumerate(encoded):
-                plain = value ^ ((key[(index + offset) % len(key)] + (index % 256) * stride + previous) & 255)
-                decoded.append(plain)
-                previous = value
-                digest = ((digest ^ plain) * 16777619) & 0xffffffff
-            if digest != int(checksum[1]):
+                # Modern exports use both map directions. Accept only a
+                # reconstruction that matches the embedded checksum.
+                inverse = [0] * len(order)
+                for index, position in enumerate(order):
+                    inverse[position] = index
+                orders = [order, inverse] if inverse != order else [order]
+            else:
+                orders = [order]
+            for chunk_order in orders:
+                try:
+                    encoded = base64.b64decode(''.join(chunks[i] for i in chunk_order), validate=True)
+                except ValueError:
+                    continue
+                previous = int(match[4]) & 255
+                decoded = bytearray()
+                digest = 2166136261
+                for index, value in enumerate(encoded):
+                    plain = value ^ ((key[(index + offset) % len(key)] + (index % 256) * stride + previous) & 255)
+                    decoded.append(plain)
+                    previous = value
+                    digest = ((digest ^ plain) * 16777619) & 0xffffffff
+                if digest == int(checksum[1]):
+                    break
+            else:
                 raise ValueError('Item data checksum mismatch')
             from bs4 import BeautifulSoup
             fragment = BeautifulSoup(decoded.decode('utf-8'), 'html.parser')
