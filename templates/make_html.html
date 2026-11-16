@@ -2216,9 +2216,15 @@
                 if (event.touches.length !== 1 || !enabled()) { reset(); return; }
                 const dx = event.touches[0].clientX - gesture.x;
                 const dy = event.touches[0].clientY - gesture.y;
-                if (!gesture.horizontal && Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { reset(); return; }
-                if (!gesture.horizontal && Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(dy) * 1.5) gesture.horizontal = true;
-                if (!gesture.horizontal) return;
+                // The browser can take over vertical scrolling before a late swipe lock.
+                if (!event.cancelable) { reset(); return; }
+                if (!gesture.horizontal) {
+                    const horizontalDistance = Math.abs(dx);
+                    const verticalDistance = Math.abs(dy);
+                    if (verticalDistance >= 6 && verticalDistance >= horizontalDistance) { reset(); return; }
+                    if (horizontalDistance < 6 || horizontalDistance <= verticalDistance) return;
+                    gesture.horizontal = true;
+                }
                 event.preventDefault();
                 gesture.dx = dx;
                 if (dragFrame === null) dragFrame = requestAnimationFrame(paintDrag);
