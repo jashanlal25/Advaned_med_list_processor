@@ -1559,7 +1559,7 @@
 
                 let name = '', value = '';
 
-                const pctMatch = line.match(/^(.+?)\s+(\d+\.?\d*)\s*%([.,:]?)\s*$/);
+                const pctMatch = line.match(/^(.+?)\s+(-?\d+\.?\d*)\s*%([.,:]?)\s*$/);
                 const netMatch = line.match(/^(.+?)\s+(\d+\.?\d*)\s*net\s*$/i);
                 const tpMatch = line.match(/^(.+?)\s+tp\s*$/i);
 
@@ -1569,7 +1569,7 @@
                     const originalMark = pctMatch[3] || ''; // Capture original ending mark
 
                     if (decreaseValue > 0) {
-                        num = Math.max(num - decreaseValue, 0);
+                        num -= decreaseValue;
                         value = num.toFixed(2) + '%';
                     } else {
                         value = pctMatch[2] + '%';
@@ -1626,14 +1626,14 @@
                 }
 
                 // Apply decrease to percentage values only and handle ending mark
-                const pctMatch = valuePart.match(/^(\d+\.?\d*)\s*%([.,:]?)(.*)/);
+                const pctMatch = valuePart.match(/^(-?\d+\.?\d*)\s*%([.,:]?)(.*)/);
                 if (pctMatch) {
                     const originalMark = pctMatch[2] || ''; // Capture original ending mark
                     const afterMark = pctMatch[3] || '';
                     let num = parseFloat(pctMatch[1]);
 
                     if (dec > 0) {
-                        num = Math.max(num - dec, 0);
+                        num -= dec;
                         valuePart = num.toFixed(2) + '%';
                     } else {
                         valuePart = pctMatch[1] + '%';
