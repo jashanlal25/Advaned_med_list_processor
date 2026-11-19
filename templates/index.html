@@ -1560,7 +1560,7 @@
                 let name = '', value = '';
 
                 const pctMatch = line.match(/^(.+?)\s+(-?\d+\.?\d*)\s*%([.,:]?)\s*$/);
-                const netMatch = line.match(/^(.+?)\s+(\d+\.?\d*)\s*net\s*$/i);
+                const netMatch = line.match(/^(.+?)\s+(\d+\.?\d*\s*net)\s*$/i);
                 const tpMatch = line.match(/^(.+?)\s+tp\s*$/i);
 
                 if (pctMatch) {
@@ -1582,7 +1582,7 @@
                     // If checkbox not checked, value stays plain (no mark added)
                 } else if (netMatch) {
                     name = netMatch[1].trim().replace(/\.+$/, '').trim();
-                    value = netMatch[2] + 'net';
+                    value = netMatch[2];
                 } else if (tpMatch) {
                     name = tpMatch[1].trim().replace(/\.+$/, '').trim();
                     value = 'Tp';
