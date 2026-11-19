@@ -192,9 +192,8 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
             if disc_suffix_attr and len(disc_suffix_attr) == 1 and disc_suffix_attr in '.,;:':
                 original_end_mark = disc_suffix_attr
 
-            if disc_num > 0:
+            if disc_num != 0:
                 disc_num -= decrease_value
-                disc_num = max(disc_num, 0)
 
                 # Apply ending mark based on user selection
                 if discount_end_mark == 'keep':
@@ -288,7 +287,6 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
                     try:
                         rate_value = float(num_part.strip('%'))
                         rate_value -= decrease_value
-                        rate_value = max(rate_value, 0)
 
                         # Apply ending mark based on user selection
                         if discount_end_mark == 'keep':
@@ -311,7 +309,6 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
                         # Check if it's a numeric value without %
                         rate_value = float(original_discount)
                         rate_value -= decrease_value
-                        rate_value = max(rate_value, 0)
                         discount_rate = f"{rate_value:.2f}"  # No % since original had none
                     except ValueError:
                         # Keep original value if it's not numeric
