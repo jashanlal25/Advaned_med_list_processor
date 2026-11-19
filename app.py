@@ -175,7 +175,7 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
             name_td = item.find("td", class_="cell-name")
             medicine_name = (name_td.text.strip() if name_td else columns[1].text.strip()).title()
 
-            # Prefer data-disc attribute; fall back to data-bonus if disc is 0
+            # Prefer an explicit data-disc value (including zero); use bonus only when discount is absent
             disc_attr = item.get("data-disc", "").strip()
             disc_suffix_attr = item.get("data-disc-suffix", "").strip()
             bonus_attr = item.get("data-bonus", "").strip()
@@ -192,9 +192,8 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
             if disc_suffix_attr and len(disc_suffix_attr) == 1 and disc_suffix_attr in '.,;:':
                 original_end_mark = disc_suffix_attr
 
-            if disc_num > 0:
+            if disc_attr:
                 disc_num -= decrease_value
-                disc_num = max(disc_num, 0)
 
                 # Apply ending mark based on user selection
                 if discount_end_mark == 'keep':
@@ -267,10 +266,6 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
                             if tax_index is not None and tax_index < len(columns)
                             else "0.00")
 
-                # Check if discount is 0.00% and get bonus rate if available
-                if discount_rate == "0.00%" and len(columns) >= 5:
-                    discount_rate = columns[4].text.strip()
-
                 # Extract numeric part and any additional separators
                 original_discount = discount_rate
                 percent_pos = original_discount.find('%')
@@ -288,7 +283,6 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
                     try:
                         rate_value = float(num_part.strip('%'))
                         rate_value -= decrease_value
-                        rate_value = max(rate_value, 0)
 
                         # Apply ending mark based on user selection
                         if discount_end_mark == 'keep':
@@ -311,7 +305,6 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
                         # Check if it's a numeric value without %
                         rate_value = float(original_discount)
                         rate_value -= decrease_value
-                        rate_value = max(rate_value, 0)
                         discount_rate = f"{rate_value:.2f}"  # No % since original had none
                     except ValueError:
                         # Keep original value if it's not numeric
