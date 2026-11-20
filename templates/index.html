@@ -1632,7 +1632,9 @@
                     const afterMark = pctMatch[3] || '';
                     let num = parseFloat(pctMatch[1]);
 
-                    if (dec > 0) {
+                    // A NET offer in the extended bonus field keeps its original discount.
+                    const netOffer = /\d\s*net\b/i.test(pipeParts);
+                    if (dec > 0 && !netOffer) {
                         num -= dec;
                         valuePart = num.toFixed(2) + '%';
                     } else {
