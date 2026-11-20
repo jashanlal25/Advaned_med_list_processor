@@ -192,8 +192,11 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
             if disc_suffix_attr and len(disc_suffix_attr) == 1 and disc_suffix_attr in '.,;:':
                 original_end_mark = disc_suffix_attr
 
+            # NET-priced offers keep their original discount, including 0.00%.
+            net_offer = bool(re.search(r'\d\s*NET\b', bonus_attr, re.IGNORECASE))
             if disc_attr:
-                disc_num -= decrease_value
+                if not net_offer:
+                    disc_num -= decrease_value
 
                 # Apply ending mark based on user selection
                 if discount_end_mark == 'keep':
@@ -266,6 +269,9 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
                             if tax_index is not None and tax_index < len(columns)
                             else "0.00")
 
+                # A NET amount in the bonus column exempts this item from discount reduction.
+                net_offer = bool(re.search(r'\d\s*NET\b', bonus_text, re.IGNORECASE))
+
                 # Extract numeric part and any additional separators
                 original_discount = discount_rate
                 percent_pos = original_discount.find('%')
@@ -282,7 +288,8 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
 
                     try:
                         rate_value = float(num_part.strip('%'))
-                        rate_value -= decrease_value
+                        if not net_offer:
+                            rate_value -= decrease_value
 
                         # Apply ending mark based on user selection
                         if discount_end_mark == 'keep':
@@ -301,14 +308,8 @@ def process_htm_content(html_content, decrease_value=1, stock_format=False, new_
                         discount_rate = original_discount
                 else:
                     # No percentage found, treat as special case (like TP, NET, etc.)
-                    try:
-                        # Check if it's a numeric value without %
-                        rate_value = float(original_discount)
-                        rate_value -= decrease_value
-                        discount_rate = f"{rate_value:.2f}"  # No % since original had none
-                    except ValueError:
-                        # Keep original value if it's not numeric
-                        discount_rate = original_discount
+                    # Non-percentage values (NET, TP, plain amounts) are never discounted.
+                    discount_rate = original_discount
 
                 results.append({
                     'name': medicine_name,
